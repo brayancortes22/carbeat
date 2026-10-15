@@ -1,0 +1,73 @@
+import React from 'react';
+import { QueueItem } from '../../../types/track.types';
+import { ThumbsUp, ThumbsDown, Flame } from 'lucide-react';
+import { Badge } from '../../../components/ui/Badge';
+
+interface QueueVoteListProps {
+  queue: QueueItem[];
+  onVote: (queueId: string, delta: number) => void;
+}
+
+export const QueueVoteList: React.FC<QueueVoteListProps> = ({ queue, onVote }) => {
+  return (
+    <div className="flex flex-col h-full space-y-2">
+      <div className="flex items-center justify-between pb-2 border-b border-white/10">
+        <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+          <Flame className="w-4 h-4 text-amber-400" /> Próximas en sonar ({queue.length})
+        </h3>
+        <span className="text-[10px] text-slate-500">Vota para cambiar el orden</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+        {queue.length === 0 ? (
+          <div className="h-32 flex flex-col items-center justify-center text-center text-slate-500 text-xs">
+            <p>No hay canciones en la cola.</p>
+            <p className="text-[10px] text-slate-600 mt-0.5">Explora el catálogo y pide la primera.</p>
+          </div>
+        ) : (
+          queue.map((item, idx) => (
+            <div
+              key={item.queueId}
+              className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:border-white/15 transition-all"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-xs font-mono font-bold text-slate-500 w-3.5">{idx + 1}</span>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-semibold text-white truncate">{item.track.title}</h4>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <span className="truncate">{item.track.artist}</span>
+                    <span>•</span>
+                    <Badge variant="purple" className="text-[9px] py-0 px-1">
+                      {item.requestedBy}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Controles de Votación */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => onVote(item.queueId, 1)}
+                  title="Votar a favor (+1)"
+                  className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors active:scale-90"
+                >
+                  <ThumbsUp className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-xs font-mono font-bold text-cyan-300 w-5 text-center">
+                  {item.votes}
+                </span>
+                <button
+                  onClick={() => onVote(item.queueId, -1)}
+                  title="Votar en contra (-1)"
+                  className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors active:scale-90"
+                >
+                  <ThumbsDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
