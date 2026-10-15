@@ -7,7 +7,8 @@ import { globalAudioEngine } from '../../core/audio/audio-player';
 import { MOCK_CAR_TRACKS } from '../../core/audio/mock-library';
 import { RoomChannel } from '../../core/network/room-channel';
 import { QueueItem, Track } from '../../types/track.types';
-import { ArrowLeft, Library } from 'lucide-react';
+import { ArrowLeft, Library, FolderPlus } from 'lucide-react';
+import { LocalScanner } from '../../core/audio/local-scanner';
 
 interface HostViewProps {
   onBackToLanding: () => void;
@@ -87,19 +88,48 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     };
   }, [channel, catalog, queue, playerState.currentTrack, connectedDjs]);
 
+  const handleFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const scannedTracks = await LocalScanner.scanAudioFiles(e.target.files);
+      if (scannedTracks.length > 0) {
+        setCatalog((prev) => [...scannedTracks, ...prev]);
+        channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
+          catalog: [...scannedTracks, ...catalog],
+          queue,
+          currentTrack: playerState.currentTrack,
+        });
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#07080D] p-3 sm:p-6 flex flex-col justify-between">
       {/* Barra Superior de Cabina */}
-      <header className="flex items-center justify-between pb-4 border-b border-white/5">
+      <header className="flex items-center justify-between pb-4 border-b border-white/5 flex-wrap gap-2">
         <button
           onClick={onBackToLanding}
           className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> Salir del Modo Carro
         </button>
-        <div className="flex items-center gap-2">
-          <Library className="w-4 h-4 text-cyan-400" />
-          <span className="text-xs font-mono text-slate-300">{catalog.length} temas locales</span>
+
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 text-xs font-semibold cursor-pointer transition-all active:scale-95">
+            <FolderPlus className="w-3.5 h-3.5" />
+            <span>Cargar USB / Carpeta</span>
+            <input
+              type="file"
+              multiple
+              accept="audio/*,.mp3,.flac,.m4a"
+              onChange={handleFolderSelect}
+              className="hidden"
+            />
+          </label>
+
+          <div className="flex items-center gap-1.5">
+            <Library className="w-4 h-4 text-cyan-400" />
+            <span className="text-xs font-mono text-slate-300">{catalog.length} temas locales</span>
+          </div>
         </div>
       </header>
 

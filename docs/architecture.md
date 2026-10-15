@@ -35,3 +35,8 @@ CarBeat es un sistema de reproducción y control musical colaborativo diseñado 
 
 - **LAN Directo:** Se activa cuando Host y Client comparten el mismo segmento de red (Hotspot del carro o Wi-Fi doméstico).
 - **Cloud Relay:** Se activa cuando los dispositivos están en redes distintas (ej. pasajero con datos móviles 4G/5G y Host en Wi-Fi o viceversa).
+
+## 4. Módulos Adicionales de Última Generación
+- **LocalScanner (`src/core/audio/local-scanner.ts`):** Permite indexar memorias USB completas y carpetas locales del carro en segundos con nombres limpios y soporte para MP3, FLAC y M4A.
+- **MusicSearchService (`src/core/network/music-search-service.ts`):** Motor de búsqueda global sin necesidad de API Keys para que los pasajeros descubran millones de canciones usando sus datos móviles y las envíen a los parlantes del carro.
+- **CI/CD Autónomo:** Pipeline configurado en `.github/workflows/deploy-vercel.yml` para despliegues continuos a Vercel.
