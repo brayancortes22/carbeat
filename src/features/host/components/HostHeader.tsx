@@ -20,10 +20,16 @@ export const HostHeader: React.FC<HostHeaderProps> = ({
   onOpenLibrary,
   onFolderSelect,
 }) => {
+  const handleConfirmClose = () => {
+    if (window.confirm('¿Seguro que deseas cerrar la sala y finalizar el viaje para todos los pasajeros?')) {
+      onCloseRoom();
+    }
+  };
+
   return (
     <header className="flex items-center justify-between pb-4 border-b border-white/5 flex-wrap gap-2">
       <button
-        onClick={onCloseRoom}
+        onClick={handleConfirmClose}
         className="flex items-center gap-2 text-xs font-bold text-red-400 hover:text-red-300 transition-colors cursor-pointer px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 active:scale-95"
       >
         <ArrowLeft className="w-4 h-4" /> Cerrar Sala
