@@ -1,14 +1,15 @@
 import { Track } from '../../types/track.types';
 import { ITunesProvider } from './itunes-provider';
 import { YouTubeMusicProvider } from './youtube-music-provider';
+import { AudiusProvider } from './audius-provider';
 import { TOP_TRENDING_TRACKS } from '../network/music-search-service';
 
-export type MusicSourceType = 'all' | 'youtube' | 'apple' | 'trending';
+export type MusicSourceType = 'all' | 'youtube' | 'audius' | 'apple' | 'trending';
 
 export class OmniMusicGateway {
   /**
    * Búsqueda en cascada multi-proveedor (OmniRoute Pattern).
-   * Intenta primero fuentes primarias y fusiona resultados deduplicados.
+   * Prioriza YouTube Music y Audius para canciones completas al 100%.
    */
   public static async search(
     query: string,
@@ -24,38 +25,40 @@ export class OmniMusicGateway {
     if (source === 'youtube') {
       const ytResults = await YouTubeMusicProvider.search(cleanQuery, djName);
       if (ytResults.length > 0) return ytResults;
-      // Fallback a Apple si YouTube no responde
-      return ITunesProvider.search(cleanQuery, djName);
+      return AudiusProvider.search(cleanQuery, djName);
+    }
+
+    if (source === 'audius') {
+      return AudiusProvider.search(cleanQuery, djName);
     }
 
     if (source === 'apple') {
       return ITunesProvider.search(cleanQuery, djName);
     }
 
-    // Búsqueda combinada paralela con OmniRoute
-    const [appleResults, ytResults] = await Promise.all([
-      ITunesProvider.search(cleanQuery, djName),
-      YouTubeMusicProvider.search(cleanQuery, djName),
+    // Búsqueda combinada en paralelo con OmniRoute
+    const [ytResults, audiusResults, appleResults] = await Promise.all([
+      YouTubeMusicProvider.search(cleanQuery, djName).catch(() => []),
+      AudiusProvider.search(cleanQuery, djName).catch(() => []),
+      ITunesProvider.search(cleanQuery, djName).catch(() => []),
     ]);
 
-    // Intercalar y deduplicar resultados
+    // Intercalar y deduplicar resultados dando máxima prioridad a fuentes de audio completo
     const combined: Track[] = [];
     const seenTitles = new Set<string>();
 
-    const maxLen = Math.max(appleResults.length, ytResults.length);
+    const candidateLists = [ytResults, audiusResults, appleResults];
+    const maxLen = Math.max(ytResults.length, audiusResults.length, appleResults.length);
+
     for (let i = 0; i < maxLen; i++) {
-      if (appleResults[i]) {
-        const key = `${appleResults[i].title.toLowerCase()}_${appleResults[i].artist.toLowerCase()}`;
-        if (!seenTitles.has(key)) {
-          seenTitles.add(key);
-          combined.push(appleResults[i]);
-        }
-      }
-      if (ytResults[i]) {
-        const key = `${ytResults[i].title.toLowerCase()}_${ytResults[i].artist.toLowerCase()}`;
-        if (!seenTitles.has(key)) {
-          seenTitles.add(key);
-          combined.push(ytResults[i]);
+      for (const list of candidateLists) {
+        const item = list[i];
+        if (item) {
+          const key = `${item.title.toLowerCase().trim()}_${item.artist.toLowerCase().trim()}`;
+          if (!seenTitles.has(key)) {
+            seenTitles.add(key);
+            combined.push(item);
+          }
         }
       }
     }

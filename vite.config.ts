@@ -91,6 +91,7 @@ function websocketRoomsPlugin(): Plugin {
                   duration: 210,
                   coverUrl: cover || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
                   audioUrl: `https://invidious.nerdvpn.de/latest_version?id=${videoId}&itag=140`,
+                  videoId,
                 });
               }
             }
@@ -176,18 +177,32 @@ function websocketRoomsPlugin(): Plugin {
       // Servidor WebSocket para descubrimiento de hosts (/ws-discovery)
       const discoveryWss = new WebSocketServer({ noServer: true });
       const discoveryClients = new Set<WebSocket>();
+      const activeHosts = new Map<string, { raw: string; timestamp: number }>();
 
       discoveryWss.on('connection', (ws) => {
+        discoveryClients.add(ws);
         console.log(`[Vite Discovery] Cliente conectado (total: ${discoveryClients.size})`);
+
+        // Enviar inmediatamente todos los hosts activos conocidos al nuevo cliente
+        const now = Date.now();
+        for (const [roomId, host] of activeHosts.entries()) {
+          if (now - host.timestamp < 15000 && ws.readyState === WebSocket.OPEN) {
+            ws.send(host.raw);
+          } else if (now - host.timestamp >= 15000) {
+            activeHosts.delete(roomId);
+          }
+        }
 
         ws.on('message', (data) => {
           try {
             const msg = JSON.parse(data.toString());
-            if (msg.type === 'HOST_ANNOUNCE') {
-              console.log(`[Vite Discovery] Anuncio de host: ${msg.roomName} (${msg.roomId})`);
+            if (msg.type === 'HOST_ANNOUNCE' && msg.roomId) {
+              const rawStr = data.toString();
+              activeHosts.set(msg.roomId, { raw: rawStr, timestamp: Date.now() });
+              console.log(`[Vite Discovery] Anuncio de host: ${msg.roomName} (${msg.roomId}) a ${discoveryClients.size} clientes`);
               for (const client of discoveryClients) {
                 if (client !== ws && client.readyState === WebSocket.OPEN) {
-                  client.send(data.toString());
+                  client.send(rawStr);
                 }
               }
             }
@@ -199,6 +214,11 @@ function websocketRoomsPlugin(): Plugin {
         ws.on('close', () => {
           discoveryClients.delete(ws);
           console.log(`[Vite Discovery] Cliente desconectado (total: ${discoveryClients.size})`);
+        });
+
+        ws.on('error', (err) => {
+          discoveryClients.delete(ws);
+          console.error('[Vite Discovery] Error de socket:', err);
         });
       });
     },
