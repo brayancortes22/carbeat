@@ -7,8 +7,9 @@ import { globalAudioEngine } from '../../core/audio/audio-player';
 import { MOCK_CAR_TRACKS } from '../../core/audio/mock-library';
 import { RoomChannel } from '../../core/network/room-channel';
 import { QueueItem, Track } from '../../types/track.types';
-import { ArrowLeft, Library, FolderPlus } from 'lucide-react';
+import { ArrowLeft, Library, FolderPlus, Globe } from 'lucide-react';
 import { LocalScanner } from '../../core/audio/local-scanner';
+import { HostWebSearchModal } from './components/HostWebSearchModal';
 
 interface HostViewProps {
   onBackToLanding: () => void;
@@ -20,6 +21,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [playerState, setPlayerState] = useState(globalAudioEngine.getState());
   const [connectedDjs, setConnectedDjs] = useState<string[]>(['Sebas (Celular)']);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
 
   const channel = useMemo(() => new RoomChannel(roomId), [roomId]);
 
@@ -102,21 +104,50 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     }
   };
 
+  const handlePlayNow = (track: Track) => {
+    setCatalog((prev) => [track, ...prev]);
+    globalAudioEngine.loadTrack(track, true);
+    channel.send('PLAYBACK_STATE', 'host', 'Pantalla Carro', {
+      isPlaying: true,
+      currentTrack: track,
+    });
+  };
+
+  const handleAddToQueue = (track: Track) => {
+    const newItem: QueueItem = {
+      queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      track,
+      votes: 1,
+      requestedBy: 'Conductor (Web)',
+      requestedAt: Date.now(),
+    };
+    setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
+    setCatalog((prev) => [track, ...prev]);
+  };
+
   return (
     <div className="min-h-screen bg-[#07080D] p-3 sm:p-6 flex flex-col justify-between">
       {/* Barra Superior de Cabina */}
       <header className="flex items-center justify-between pb-4 border-b border-white/5 flex-wrap gap-2">
         <button
           onClick={onBackToLanding}
-          className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+          className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" /> Salir del Modo Carro
         </button>
 
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 text-xs font-semibold cursor-pointer transition-all active:scale-95">
-            <FolderPlus className="w-3.5 h-3.5" />
-            <span>Cargar USB / Carpeta</span>
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+          <button
+            onClick={() => setIsSearchModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 transition-all active:scale-95 cursor-pointer"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Buscar en la Web</span>
+          </button>
+
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-semibold cursor-pointer transition-all active:scale-95">
+            <FolderPlus className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Cargar USB</span>
             <input
               type="file"
               multiple
@@ -128,7 +159,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
 
           <div className="flex items-center gap-1.5">
             <Library className="w-4 h-4 text-cyan-400" />
-            <span className="text-xs font-mono text-slate-300">{catalog.length} temas locales</span>
+            <span className="text-xs font-mono text-slate-300">{catalog.length} temas</span>
           </div>
         </div>
       </header>
@@ -169,6 +200,14 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
       <footer className="text-center text-[10px] text-slate-600 font-mono">
         CarBeat Host Audio Active • Latencia de cabina &lt; 5ms
       </footer>
+
+      {/* Modal de Búsqueda de Música en la Web para el Carro */}
+      <HostWebSearchModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        onPlayNow={handlePlayNow}
+        onAddToQueue={handleAddToQueue}
+      />
     </div>
   );
 };

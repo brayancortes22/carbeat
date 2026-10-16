@@ -10,6 +10,7 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
-    host: true, // Permite acceder desde celulares en la misma red Wi-Fi o Hotspot
+    host: '0.0.0.0',
+    cors: true,
   },
 });
