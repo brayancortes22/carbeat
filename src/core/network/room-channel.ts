@@ -2,6 +2,12 @@ import { RoomEventType, RoomMessage } from '../../types/room.types';
 
 type MessageHandler = (msg: RoomMessage) => void;
 
+export function getDefaultWsUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/ws-rooms`;
+}
+
 export class RoomChannel {
   private roomId: string;
   private ws: WebSocket | null = null;
@@ -10,7 +16,7 @@ export class RoomChannel {
   private isConnected = false;
   private isClosed = false;
 
-  constructor(roomId: string, wsUrl?: string) {
+  constructor(roomId: string, wsUrl: string = getDefaultWsUrl()) {
     this.roomId = roomId;
     this.initBroadcast();
     if (wsUrl) {
@@ -36,20 +42,30 @@ export class RoomChannel {
       this.ws = new WebSocket(`${url}?room=${encodeURIComponent(this.roomId)}`);
       this.ws.onopen = () => {
         this.isConnected = true;
+        console.log('[RoomChannel] WebSocket conectado exitosamente a la sala:', this.roomId);
       };
       this.ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as RoomMessage;
           this.dispatch(msg);
         } catch (e) {
-          console.error('[RoomChannel] JSON parse error', e);
+          console.error('[RoomChannel] Error parseando JSON de WS:', e);
         }
       };
       this.ws.onclose = () => {
         this.isConnected = false;
+        // Reintentar conexión después de 2 segundos si no fue cerrado explícitamente
+        if (!this.isClosed) {
+          setTimeout(() => {
+            if (!this.isClosed) this.initWebSocket(url);
+          }, 2000);
+        }
+      };
+      this.ws.onerror = (err) => {
+        console.warn('[RoomChannel] WS error, fallback a broadcast local:', err);
       };
     } catch (e) {
-      console.warn('[RoomChannel] WebSocket fallback to BroadcastChannel', e);
+      console.warn('[RoomChannel] Fallo iniciando WebSocket:', e);
     }
   }
 
@@ -65,30 +81,23 @@ export class RoomChannel {
       payload,
     };
 
-    // Enviar a WebSocket si está activo
+    // Enviar a WebSocket hacia los demás dispositivos
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify(msg));
       } catch (err) {
-        console.warn('[RoomChannel] WS send failed:', err);
+        console.warn('[RoomChannel] Fallo envío WS:', err);
       }
     }
 
-    // Difundir en canal local con protección ante canales cerrados
+    // Enviar a BroadcastChannel local
     try {
       if (!this.broadcast) {
         this.initBroadcast();
       }
       this.broadcast?.postMessage(msg);
-    } catch (err) {
-      console.warn('[RoomChannel] Broadcast postMessage recovered:', err);
-      // Reintentar reiniciando el canal
-      try {
-        this.initBroadcast();
-        this.broadcast?.postMessage(msg);
-      } catch {
-        // Ignorar de forma segura sin quebrar React
-      }
+    } catch {
+      // Ignorar de forma segura
     }
   }
 
@@ -102,7 +111,7 @@ export class RoomChannel {
       try {
         h(msg);
       } catch (err) {
-        console.error('[RoomChannel] Error in message handler:', err);
+        console.error('[RoomChannel] Error en handler:', err);
       }
     });
   }

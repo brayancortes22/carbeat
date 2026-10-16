@@ -45,12 +45,20 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     }
   }, [queue, catalog]);
 
-  // Suscribirse a cambios de audio y configurar avance automático
+  // Suscribirse a cambios de audio y difundir a los DJs
   useEffect(() => {
-    const unsub = globalAudioEngine.subscribe(setPlayerState);
+    const unsub = globalAudioEngine.subscribe((state) => {
+      setPlayerState(state);
+      channel.send('PLAYBACK_STATE', 'host', 'Pantalla Carro', {
+        isPlaying: state.isPlaying,
+        currentTime: state.currentTime,
+        duration: state.duration,
+        currentTrack: state.currentTrack,
+      });
+    });
     globalAudioEngine.setOnEnded(() => handleNext());
     return unsub;
-  }, [handleNext]);
+  }, [handleNext, channel]);
 
   // Cargar primera canción si no hay ninguna
   useEffect(() => {
@@ -78,17 +86,38 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
           requestedBy: payload.requestedBy || 'DJ Anónimo',
           requestedAt: Date.now(),
         };
-        setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
+        const updatedQueue = [...queueRef.current, newItem].sort((a, b) => b.votes - a.votes);
+        setQueue(updatedQueue);
+        // Si no hay reproducción activa, comenzar de inmediato
+        if (!playerStateRef.current.currentTrack || !playerStateRef.current.isPlaying) {
+          globalAudioEngine.loadTrack(newItem.track, true);
+        }
+        // Difundir la nueva cola a todos los DJs
+        channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
+          catalog: catalogRef.current,
+          queue: updatedQueue,
+          currentTrack: playerStateRef.current.currentTrack,
+        });
       } else if (msg.type === 'VOTE_TRACK') {
         const payload = msg.payload as { queueId: string; delta: number };
-        setQueue((prev) =>
-          prev
-            .map((item) => (item.queueId === payload.queueId ? { ...item, votes: Math.max(0, item.votes + payload.delta) } : item))
-            .sort((a, b) => b.votes - a.votes)
-        );
+        const updatedQueue = queueRef.current
+          .map((item) => (item.queueId === payload.queueId ? { ...item, votes: Math.max(0, item.votes + payload.delta) } : item))
+          .sort((a, b) => b.votes - a.votes);
+        setQueue(updatedQueue);
+        channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
+          catalog: catalogRef.current,
+          queue: updatedQueue,
+          currentTrack: playerStateRef.current.currentTrack,
+        });
       } else if (msg.type === 'NEW_TRACK_OFFER') {
         const payload = msg.payload as { track: Track };
-        setCatalog((prev) => [payload.track, ...prev]);
+        const updatedCatalog = [payload.track, ...catalogRef.current];
+        setCatalog(updatedCatalog);
+        channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
+          catalog: updatedCatalog,
+          queue: queueRef.current,
+          currentTrack: playerStateRef.current.currentTrack,
+        });
       } else if (msg.type === 'ROOM_JOIN') {
         if (msg.senderName) {
           setConnectedDjs((prev) => (prev.includes(msg.senderName!) ? prev : [...prev, msg.senderName!]));
