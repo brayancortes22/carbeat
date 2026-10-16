@@ -14,6 +14,7 @@ import { apiUrl } from '../../core/network/api-config';
 interface LandingViewProps {
   onSelectHost: () => void;
   onJoinDj: (roomId: string, djName: string, hostIp?: string, hostPort?: number) => void;
+  onOpenSimulator?: () => void;
 }
 
 interface DiscoveredHost {
@@ -24,7 +25,11 @@ interface DiscoveredHost {
   djCount: number;
 }
 
-export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj }) => {
+export const LandingView: React.FC<LandingViewProps> = ({
+  onSelectHost,
+  onJoinDj,
+  onOpenSimulator,
+}) => {
   const [roomIdInput, setRoomIdInput] = useState(() => {
     return localStorage.getItem('carbeat_last_room') || '';
   });
@@ -75,7 +80,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj
   return (
     <div className="min-h-screen bg-[#07080D] flex flex-col justify-between selection:bg-cyan-500 selection:text-slate-950">
       <div>
-        <CockpitHeader />
+        <CockpitHeader onOpenSimulator={onOpenSimulator} />
         <HeroBanner />
         <UpdateNotificationBanner />
 
