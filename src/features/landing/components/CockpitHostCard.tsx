@@ -9,7 +9,10 @@ interface CockpitHostCardProps {
 
 export const CockpitHostCard: React.FC<CockpitHostCardProps> = ({ onSelectHost }) => {
   return (
-    <GlassCard className="flex flex-col justify-between hover:border-cyan-500/50 group transition-all duration-300 relative overflow-hidden">
+    <GlassCard
+      onClick={onSelectHost}
+      className="flex flex-col justify-between hover:border-cyan-500/50 group transition-all duration-300 relative overflow-hidden cursor-pointer"
+    >
       {/* Resplandor ambiental de fondo */}
       <div className="absolute -top-16 -left-16 w-44 h-44 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-cyan-500/20 transition-all duration-500" />
 

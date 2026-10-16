@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { GitCommit, RefreshCw, Sparkles } from 'lucide-react';
 import { Badge } from './Badge';
 
+import { apiUrl } from '../../core/network/api-config';
+
 interface VersionBadgeProps {
   version: string;
   compact?: boolean;
@@ -18,7 +20,7 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
     let isMounted = true;
     const checkVersion = async () => {
       try {
-        const res = await fetch(`/api/version?t=${Date.now()}`);
+        const res = await fetch(apiUrl(`/api/version?t=${Date.now()}`));
         if (res.ok) {
           const data = await res.json();
           if (isMounted && data?.version) {
@@ -42,9 +44,13 @@ export const VersionBadge: React.FC<VersionBadgeProps> = ({
 
   const handleReload = () => {
     setIsUpdating(true);
+    // Si estamos en entorno móvil nativo / Capacitor, descargar el APK actualizado
+    if (window.location.protocol === 'capacitor:' || (window as any).Capacitor) {
+      window.open(apiUrl('/downloads/carbeat-latest.apk'), '_system');
+    }
     setTimeout(() => {
       window.location.reload();
-    }, 300);
+    }, 500);
   };
 
   return (

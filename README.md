@@ -21,10 +21,18 @@ Sistema colaborativo de música en tiempo real para vehículos y viajes. Convier
     - `[✨ IA Autopilot]` para recomendaciones generadas por la IA.
 - **🚪 Cierre de Sala y Expulsión Limpia:**
   - Al salir del Modo Carro, el reproductor apaga de inmediato el audio (`pause()`), destruye la sala en el backend y emite `CLOSE_ROOM`, mostrando un modal de fin de viaje y regresando a todos los pasajeros al inicio.
-- **📱 App Móvil Android (APK Oficial Compilado):**
-  - Instalador nativo Android (`carbeat-latest.apk`) compilado con Capacitor 8 y JDK 21 vía GitHub Actions, listo para descargar e instalar con 1 click.
-- **🔄 Auto-Actualización Dinámica de Versión:**
-  - Badge dinámico (`v1.2.0`) que consulta periódicamente `/api/version`, alerta sobre nuevas versiones con pulsos visuales y permite actualizar la aplicación al instante.
+- **📱 App Móvil Android 100% Offline (Cero Pantallas Blancas):**
+  - Empaquetado de assets locales (`dist/`) directo en el APK servido bajo `https://localhost` mediante Capacitor y Gradle.
+  - Funciona de forma instantánea y completamente desconectada en cabinas vehiculares sin internet, sin errores de DNS (`net::ERR_NAME_NOT_RESOLVED`).
+- **💾 Almacenamiento Local Dual e IndexedDB en la Tablet:**
+  - Nueva pestaña en "Mi Música" para gestionar directamente los archivos de audio locales (.mp3, .flac, .wav) almacenados en la tablet/USB.
+  - Carga automática en memoria al iniciar la cabina y escaneo directo con 1 tap.
+- **⏮️ Historial Real de Pistas Previas:**
+  - Botón de retroceso (`handlePrev`) con doble click (<2.5s) que navega hacia atrás en la pila histórica real de canciones reproducidas en lugar de simplemente reiniciar la canción actual.
+- **🛡️ Cierre Atómico y Erradicación de Salas Fantasma:**
+  - Purga de salas huérfanas en menos de 6 segundos en `/api/room` y extracción robusta de `roomId` desde POST body y query.
+- **🔄 Auto-Actualización Dinámica de Versión y Descarga Directa:**
+  - Notificación inteligente en tiempo real y descarga instantánea del APK compilado.
 
 ---
 

@@ -52,6 +52,11 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  // Asegurar que al cambiar de pantalla siempre inicie en la parte superior sin cortes
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [mode]);
+
   const handleSelectHost = () => {
     const freshRoom = generateRoomId();
     setRoomId(freshRoom);
@@ -81,7 +86,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <main className="min-h-screen bg-[#08090E] text-slate-100 flex flex-col justify-center">
+    <div className="min-h-screen bg-[#08090E] text-slate-100 flex flex-col">
       {mode === 'landing' && (
         <LandingView
           onSelectHost={handleSelectHost}
@@ -101,7 +106,7 @@ export const App: React.FC = () => {
           onLeaveRoom={handleBackToLanding}
         />
       )}
-    </main>
+    </div>
   );
 };
 
