@@ -33,7 +33,7 @@ export const ApkDownloadCard: React.FC = () => {
             className="flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold shadow-lg shadow-cyan-500/25 transition-all active:scale-95 text-sm"
           >
             <Download className="w-4 h-4" />
-            Descargar APK (32 MB)
+            Descargar APK (4.1 MB)
           </a>
           <span className="text-[10px] text-center text-slate-500 flex items-center justify-center gap-1">
             <Smartphone className="w-3 h-3" /> También funciona en tu teléfono
