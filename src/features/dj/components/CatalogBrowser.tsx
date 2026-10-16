@@ -1,18 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import { Track } from '../../../types/track.types';
-import { Search, Plus, Music, Check } from 'lucide-react';
+import { Search, Plus, Music, Check, Wifi, Globe } from 'lucide-react';
 import { Badge } from '../../../components/ui/Badge';
 import { TrackCover } from '../../../components/ui/TrackCover';
 
 interface CatalogBrowserProps {
   catalog: Track[];
   onQueueTrack: (track: Track) => void;
+  onSearchWeb?: (query: string) => void;
 }
 
-export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueueTrack }) => {
+export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueueTrack, onSearchWeb }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'local' | 'passengers'>('all');
   const [requestingId, setRequestingId] = useState<string | null>(null);
+  const [showNetNotice, setShowNetNotice] = useState(false);
 
   const filteredTracks = useMemo(() => {
     return catalog.filter((track) => {
@@ -28,21 +30,46 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueue
     });
   }, [catalog, searchTerm, activeTab]);
 
+  const hasNoResults = filteredTracks.length === 0 && searchTerm.trim().length >= 2;
+
   const handleQueueClick = (track: Track) => {
     setRequestingId(track.id);
     onQueueTrack(track);
     setTimeout(() => setRequestingId(null), 1200);
   };
 
+  const handleSearchWeb = () => {
+    if (onSearchWeb && searchTerm.trim()) {
+      onSearchWeb(searchTerm.trim());
+      setShowNetNotice(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full space-y-3">
+      {/* Aviso de búsqueda en internet - Solo se muestra una vez cuando no hay resultados */}
+      {showNetNotice && (
+        <div className="flex items-center gap-2 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
+          <Wifi className="w-3.5 h-3.5 shrink-0" />
+          <span className="flex-1">
+            No se encontró en el carro. {navigator.onLine ? 'Puedes buscar en internet.' : 'Sin conexión a internet.'}
+          </span>
+          <button onClick={() => setShowNetNotice(false)} className="text-amber-400 hover:text-amber-200 font-bold cursor-pointer">
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Buscador Rápido */}
       <div className="relative">
         <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
         <input
           type="text"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setShowNetNotice(false);
+          }}
           placeholder="Buscar canción, artista o álbum..."
           className="w-full bg-slate-900/80 border border-slate-700/60 rounded-xl pl-10 pr-4 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/80 transition-colors"
         />
@@ -75,7 +102,23 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueue
         {filteredTracks.length === 0 ? (
           <div className="text-center py-8 text-xs text-slate-500">
             <Music className="w-8 h-8 mx-auto mb-2 opacity-40" />
-            No se encontraron canciones con ese nombre.
+            {hasNoResults ? (
+              <>
+                <p className="text-slate-400 font-semibold mb-1">No se encontró "{searchTerm}" en el carro</p>
+                <p className="text-slate-600 mb-3">La canción no está en la música local del vehículo.</p>
+                {onSearchWeb && (
+                  <button
+                    onClick={handleSearchWeb}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-bold hover:bg-purple-500/20 transition-all cursor-pointer"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    Buscar en Internet
+                  </button>
+                )}
+              </>
+            ) : (
+              'No hay canciones disponibles.'
+            )}
           </div>
         ) : (
           filteredTracks.map((track) => {

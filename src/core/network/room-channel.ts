@@ -2,6 +2,9 @@ import { RoomEventType, RoomMessage } from '../../types/room.types';
 
 type MessageHandler = (msg: RoomMessage) => void;
 
+// ID único para esta instancia de canal (evita auto-mensajes de BroadcastChannel)
+const CLIENT_ID = `client_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
 export function getDefaultWsUrl(): string {
   if (typeof window === 'undefined') return '';
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -16,6 +19,7 @@ export class RoomChannel {
   private pendingQueue: string[] = [];
   private isConnected = false;
   private isClosed = false;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(roomId: string, wsUrl: string = getDefaultWsUrl()) {
     this.roomId = roomId;
@@ -30,7 +34,10 @@ export class RoomChannel {
       try {
         this.broadcast = new BroadcastChannel(`carbeat_room_${this.roomId}`);
         this.broadcast.onmessage = (event) => {
-          this.dispatch(event.data as RoomMessage);
+          const msg = event.data as RoomMessage & { _clientId?: string };
+          // Ignorar mensajes que nosotros mismos enviamos por BroadcastChannel
+          if (msg._clientId === CLIENT_ID) return;
+          this.dispatch(msg);
         };
       } catch (err) {
         console.warn('[RoomChannel] BroadcastChannel init error:', err);
@@ -41,7 +48,7 @@ export class RoomChannel {
   private initWebSocket(url: string): void {
     try {
       this.ws = new WebSocket(`${url}?room=${encodeURIComponent(this.roomId)}`);
-      
+
       this.ws.onopen = () => {
         this.isConnected = true;
         console.log('[RoomChannel] WS conectado a la sala:', this.roomId);
@@ -55,6 +62,7 @@ export class RoomChannel {
       this.ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as RoomMessage;
+          // No filtrar por clientId en WS - el servidor ya excluye al remitente
           this.dispatch(msg);
         } catch (e) {
           console.error('[RoomChannel] Error parseando JSON de WS:', e);
@@ -64,30 +72,43 @@ export class RoomChannel {
       this.ws.onclose = () => {
         this.isConnected = false;
         if (!this.isClosed) {
-          setTimeout(() => {
+          this.reconnectTimeout = setTimeout(() => {
             if (!this.isClosed) this.initWebSocket(url);
           }, 1500);
         }
       };
 
-      this.ws.onerror = (err) => {
-        console.warn('[RoomChannel] WS connection issue:', err);
+      this.ws.onerror = () => {
+        console.warn('[RoomChannel] WS connection error, intentando reconectar...');
+        this.isConnected = false;
+        if (!this.isClosed && !this.reconnectTimeout) {
+          this.reconnectTimeout = setTimeout(() => {
+            if (!this.isClosed) this.initWebSocket(url);
+          }, 1500);
+        }
       };
     } catch (e) {
       console.warn('[RoomChannel] Fallo iniciando WebSocket:', e);
+      this.isConnected = false;
+      if (!this.isClosed && !this.reconnectTimeout) {
+        this.reconnectTimeout = setTimeout(() => {
+          if (!this.isClosed) this.initWebSocket(url);
+        }, 1500);
+      }
     }
   }
 
   public send<T>(type: RoomEventType, senderId: string, senderName: string, payload: T): void {
     if (this.isClosed) return;
 
-    const msg: RoomMessage<T> = {
+    const msg: RoomMessage<T> & { _clientId?: string } = {
       type,
       roomId: this.roomId,
       senderId,
       senderName,
       timestamp: Date.now(),
       payload,
+      _clientId: CLIENT_ID,
     };
 
     const rawString = JSON.stringify(msg);
@@ -133,12 +154,16 @@ export class RoomChannel {
 
   public close(): void {
     this.isClosed = true;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
     if (this.ws) {
-      try { this.ws.close(); } catch {}
+      try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
     }
     if (this.broadcast) {
-      try { this.broadcast.close(); } catch {}
+      try { this.broadcast.close(); } catch { /* ignore */ }
       this.broadcast = null;
     }
     this.handlers.clear();
@@ -146,6 +171,6 @@ export class RoomChannel {
   }
 
   public getStatus(): boolean {
-    return this.isConnected || !!this.broadcast;
+    return this.isConnected;
   }
 }

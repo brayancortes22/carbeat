@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Badge } from '../../../components/ui/Badge';
@@ -11,19 +11,47 @@ interface RoomQrBadgeProps {
 
 export const RoomQrBadge: React.FC<RoomQrBadgeProps> = ({ roomId, connectedCount }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [accessUrl, setAccessUrl] = useState('');
 
   useEffect(() => {
-    if (canvasRef.current) {
-      const roomUrl = `${window.location.origin}/?room=${encodeURIComponent(roomId)}`;
-      QRCode.toCanvas(canvasRef.current, roomUrl, {
-        width: 140,
-        margin: 1,
-        color: {
-          dark: '#00F0FF',
-          light: '#090A0F',
-        },
-      }).catch(console.error);
+    let isMounted = true;
+
+    async function generateQr() {
+      let baseUrl = window.location.origin;
+      try {
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          const res = await fetch('/api/server-info');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.ips && data.ips.length > 0) {
+              baseUrl = `http://${data.ips[0]}:${data.port || 5173}`;
+            }
+          }
+        }
+      } catch {
+        // Fallback a window.location.origin
+      }
+
+      const roomUrl = `${baseUrl}/?room=${encodeURIComponent(roomId)}`;
+      if (isMounted) setAccessUrl(roomUrl);
+
+      if (canvasRef.current) {
+        QRCode.toCanvas(canvasRef.current, roomUrl, {
+          width: 140,
+          margin: 1,
+          color: {
+            dark: '#00F0FF',
+            light: '#090A0F',
+          },
+        }).catch(console.error);
+      }
     }
+
+    generateQr();
+
+    return () => {
+      isMounted = false;
+    };
   }, [roomId]);
 
   return (
@@ -45,7 +73,9 @@ export const RoomQrBadge: React.FC<RoomQrBadgeProps> = ({ roomId, connectedCount
       <span className="text-xl font-mono font-black text-cyan-300 tracking-wider select-all">
         {roomId}
       </span>
-      <span className="text-[10px] text-slate-500 mt-1">Escanea con iPhone o Android</span>
+      <span className="text-[9px] text-slate-500 mt-1 max-w-[150px] truncate" title={accessUrl}>
+        {accessUrl ? new URL(accessUrl).host : 'Escanea con tu celular'}
+      </span>
     </GlassCard>
   );
 };

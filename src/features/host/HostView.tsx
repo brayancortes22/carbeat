@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { NowPlayingScreen } from './components/NowPlayingScreen';
 import { RoomQrBadge } from './components/RoomQrBadge';
 import { HostQueueList } from './components/HostQueueList';
@@ -10,6 +10,10 @@ import { QueueItem, Track } from '../../types/track.types';
 import { ArrowLeft, Library, FolderPlus, Globe } from 'lucide-react';
 import { LocalScanner } from '../../core/audio/local-scanner';
 import { HostWebSearchModal } from './components/HostWebSearchModal';
+import { CARBEAT_VERSION } from '../../core/version';
+import { VersionBadge } from '../../components/ui/VersionBadge';
+import { startHostAnnouncer, stopHostAnnouncer } from '../../core/network/host-discovery';
+import { StorageService } from '../../core/storage/storage-service';
 
 interface HostViewProps {
   onBackToLanding: () => void;
@@ -17,33 +21,44 @@ interface HostViewProps {
 }
 
 export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'BEAT-784' }) => {
-  const [catalog, setCatalog] = useState<Track[]>(MOCK_CAR_TRACKS);
-  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [catalog, setCatalog] = useState<Track[]>(() => StorageService.loadCatalog(MOCK_CAR_TRACKS));
+  const [queue, setQueue] = useState<QueueItem[]>(() => StorageService.loadQueue());
   const [playerState, setPlayerState] = useState(globalAudioEngine.getState());
-  const [connectedDjs, setConnectedDjs] = useState<string[]>(['Sebas (Celular)']);
+  const [connectedDjs, setConnectedDjs] = useState<string[]>([]);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isAnnouncing, setIsAnnouncing] = useState(false);
 
   const channel = useMemo(() => new RoomChannel(roomId), [roomId]);
-  const catalogRef = React.useRef(catalog);
-  const queueRef = React.useRef(queue);
-  const playerStateRef = React.useRef(playerState);
 
-  catalogRef.current = catalog;
+  // Refs para uso en callbacks sin causar re-renders
+  const queueRef = useRef(queue);
+  const catalogRef = useRef(catalog);
+  const playerStateRef = useRef(playerState);
   queueRef.current = queue;
+  catalogRef.current = catalog;
   playerStateRef.current = playerState;
 
   // Manejar el avance a la siguiente canción
   const handleNext = useCallback(() => {
-    if (queue.length > 0) {
-      const nextItem = queue[0];
+    const currentQueue = queueRef.current;
+    const currentCatalog = catalogRef.current;
+    const currentTrackId = playerStateRef.current.currentTrack?.id;
+    if (currentQueue.length > 0) {
+      const nextItem = currentQueue[0];
+      // Si es la misma pista que acaba de terminar, saltarla
+      if (nextItem.track.id === currentTrackId && currentQueue.length > 1) {
+        const nextNextItem = currentQueue[1];
+        setQueue((prev) => prev.slice(2));
+        globalAudioEngine.loadTrack(nextNextItem.track, true);
+        return;
+      }
       setQueue((prev) => prev.slice(1));
-      globalAudioEngine.loadTrack(nextItem.track);
-    } else if (catalog.length > 0) {
-      // Si la cola está vacía, reproducir aleatorio del catálogo local
-      const randomIdx = Math.floor(Math.random() * catalog.length);
-      globalAudioEngine.loadTrack(catalog[randomIdx]);
+      globalAudioEngine.loadTrack(nextItem.track, true);
+    } else if (currentCatalog.length > 0) {
+      const randomIdx = Math.floor(Math.random() * currentCatalog.length);
+      globalAudioEngine.loadTrack(currentCatalog[randomIdx], true);
     }
-  }, [queue, catalog]);
+  }, []);
 
   // Suscribirse a cambios de audio y difundir a los DJs
   useEffect(() => {
@@ -57,8 +72,34 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
       });
     });
     globalAudioEngine.setOnEnded(() => handleNext());
-    return unsub;
-  }, [handleNext, channel]);
+    return () => {
+      unsub();
+    };
+  }, [channel, handleNext]);
+
+  // Heartbeat: Enviar progreso cada segundo para sincronizar la barra del celular
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const state = globalAudioEngine.getState();
+      channel.send('PLAYBACK_STATE', 'host', 'Pantalla Carro', {
+        isPlaying: state.isPlaying,
+        currentTime: state.currentTime,
+        duration: state.duration,
+        currentTrack: state.currentTrack,
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [channel]);
+
+  // Guardar catálogo en localStorage ante cambios
+  useEffect(() => {
+    StorageService.saveCatalog(catalog);
+  }, [catalog]);
+
+  // Guardar cola en localStorage ante cambios
+  useEffect(() => {
+    StorageService.saveQueue(queue);
+  }, [queue]);
 
   // Cargar primera canción si no hay ninguna
   useEffect(() => {
@@ -74,11 +115,42 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     };
   }, [channel]);
 
+  // Anunciar presencia del Host por WebSocket de descubrimiento (/ws-discovery)
+  // Esto permite que los celulares encuentren el carro en la misma red Wi-Fi
+  useEffect(() => {
+    setIsAnnouncing(true);
+    startHostAnnouncer(roomId, `Carro ${roomId}`, window.location.hostname, connectedDjs.length);
+    return () => {
+      setIsAnnouncing(false);
+      stopHostAnnouncer();
+    };
+  }, [roomId, connectedDjs.length]);
+
+  // Sincronizar cola con DJs cuando cambia
+  useEffect(() => {
+    channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
+      catalog: catalogRef.current,
+      queue: queueRef.current,
+      currentTrack: playerStateRef.current.currentTrack,
+      isPlaying: playerStateRef.current.isPlaying,
+      currentTime: playerStateRef.current.currentTime,
+      duration: playerStateRef.current.duration,
+    });
+  }, [queue, channel]);
+
   // Escuchar mensajes entrantes de los DJs
   useEffect(() => {
     const unsubChannel = channel.subscribe((msg) => {
       if (msg.type === 'QUEUE_TRACK') {
         const payload = msg.payload as { track: Track; requestedBy: string };
+
+        // Asegurar que la nueva pista quede en el catálogo del host
+        if (!catalogRef.current.some((t) => t.id === payload.track.id)) {
+          const updatedCatalog = [payload.track, ...catalogRef.current];
+          catalogRef.current = updatedCatalog;
+          setCatalog(updatedCatalog);
+        }
+
         const newItem: QueueItem = {
           queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           track: payload.track,
@@ -86,47 +158,75 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
           requestedBy: payload.requestedBy || 'DJ Anónimo',
           requestedAt: Date.now(),
         };
-        const updatedQueue = [...queueRef.current, newItem].sort((a, b) => b.votes - a.votes);
-        setQueue(updatedQueue);
-        // Si no hay reproducción activa, comenzar de inmediato
-        if (!playerStateRef.current.currentTrack || !playerStateRef.current.isPlaying) {
+
+        const currentPlayingTrack = playerStateRef.current.currentTrack;
+        const isCurrentlyPlaying = playerStateRef.current.isPlaying;
+
+        let finalQueue: QueueItem[];
+        let nextPlayingTrack = currentPlayingTrack;
+
+        if (!currentPlayingTrack) {
+          // Si el carro no tiene canción cargada, comenzar a reproducir de inmediato
           globalAudioEngine.loadTrack(newItem.track, true);
+          finalQueue = queueRef.current;
+          nextPlayingTrack = newItem.track;
+        } else {
+          // Si ya hay una canción sonando o cargada, añadir a la cola ordenada por votos
+          finalQueue = [...queueRef.current, newItem].sort((a, b) => b.votes - a.votes);
         }
-        // Difundir la nueva cola a todos los DJs
+
+        queueRef.current = finalQueue;
+        setQueue(finalQueue);
+
+        // Notificar inmediatamente la cola real y el estado del reproductor a todos los DJs
         channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
           catalog: catalogRef.current,
-          queue: updatedQueue,
-          currentTrack: playerStateRef.current.currentTrack,
+          queue: finalQueue,
+          currentTrack: nextPlayingTrack,
+          isPlaying: isCurrentlyPlaying || !currentPlayingTrack,
+          currentTime: playerStateRef.current.currentTime,
+          duration: playerStateRef.current.duration,
         });
       } else if (msg.type === 'VOTE_TRACK') {
         const payload = msg.payload as { queueId: string; delta: number };
         const updatedQueue = queueRef.current
           .map((item) => (item.queueId === payload.queueId ? { ...item, votes: Math.max(0, item.votes + payload.delta) } : item))
           .sort((a, b) => b.votes - a.votes);
+        queueRef.current = updatedQueue;
         setQueue(updatedQueue);
         channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
           catalog: catalogRef.current,
           queue: updatedQueue,
           currentTrack: playerStateRef.current.currentTrack,
+          isPlaying: playerStateRef.current.isPlaying,
+          currentTime: playerStateRef.current.currentTime,
+          duration: playerStateRef.current.duration,
         });
       } else if (msg.type === 'NEW_TRACK_OFFER') {
         const payload = msg.payload as { track: Track };
         const updatedCatalog = [payload.track, ...catalogRef.current];
+        catalogRef.current = updatedCatalog;
         setCatalog(updatedCatalog);
         channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
           catalog: updatedCatalog,
           queue: queueRef.current,
           currentTrack: playerStateRef.current.currentTrack,
+          isPlaying: playerStateRef.current.isPlaying,
+          currentTime: playerStateRef.current.currentTime,
+          duration: playerStateRef.current.duration,
         });
       } else if (msg.type === 'ROOM_JOIN') {
         if (msg.senderName) {
           setConnectedDjs((prev) => (prev.includes(msg.senderName!) ? prev : [...prev, msg.senderName!]));
         }
-        // Responder enviando catálogo y cola
+        // Responder inmediatamente enviando catálogo, cola y estado actual de reproducción
         channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
           catalog: catalogRef.current,
           queue: queueRef.current,
           currentTrack: playerStateRef.current.currentTrack,
+          isPlaying: playerStateRef.current.isPlaying,
+          currentTime: playerStateRef.current.currentTime,
+          duration: playerStateRef.current.duration,
         });
       }
     });
@@ -140,21 +240,28 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     if (e.target.files && e.target.files.length > 0) {
       const scannedTracks = await LocalScanner.scanAudioFiles(e.target.files);
       if (scannedTracks.length > 0) {
-        setCatalog((prev) => [...scannedTracks, ...prev]);
+        const newCatalog = [...scannedTracks, ...catalogRef.current];
+        setCatalog(newCatalog);
         channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
-          catalog: [...scannedTracks, ...catalog],
-          queue,
-          currentTrack: playerState.currentTrack,
+          catalog: newCatalog,
+          queue: queueRef.current,
+          currentTrack: playerStateRef.current.currentTrack,
+          isPlaying: playerStateRef.current.isPlaying,
+          currentTime: playerStateRef.current.currentTime,
+          duration: playerStateRef.current.duration,
         });
       }
     }
   };
 
   const handlePlayNow = (track: Track) => {
-    setCatalog((prev) => [track, ...prev]);
+    const newCatalog = [track, ...catalogRef.current];
+    setCatalog(newCatalog);
     globalAudioEngine.loadTrack(track, true);
     channel.send('PLAYBACK_STATE', 'host', 'Pantalla Carro', {
       isPlaying: true,
+      currentTime: 0,
+      duration: track.duration || 0,
       currentTrack: track,
     });
   };
@@ -167,8 +274,10 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
       requestedBy: 'Conductor (Web)',
       requestedAt: Date.now(),
     };
-    setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
-    setCatalog((prev) => [track, ...prev]);
+    const newQueue = [...queueRef.current, newItem].sort((a, b) => b.votes - a.votes);
+    setQueue(newQueue);
+    const newCatalog = [track, ...catalogRef.current];
+    setCatalog(newCatalog);
   };
 
   return (
@@ -183,6 +292,12 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
         </button>
 
         <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+          {/* Indicador de anuncio de descubrimiento */}
+          <BadgeDiscovery isAnnouncing={isAnnouncing} />
+
+          {/* Indicador de versión */}
+          <VersionBadge version={CARBEAT_VERSION} compact />
+
           <button
             onClick={() => setIsSearchModalOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 transition-all active:scale-95 cursor-pointer"
@@ -257,3 +372,18 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     </div>
   );
 };
+
+interface BadgeDiscoveryProps {
+  isAnnouncing: boolean;
+}
+
+function BadgeDiscovery({ isAnnouncing }: BadgeDiscoveryProps) {
+  return (
+    <span className={`flex items-center gap-1 text-xs ${isAnnouncing ? 'text-emerald-400' : 'text-slate-500'}`}>
+      <div
+        className={`w-1.5 h-1.5 rounded-full ${isAnnouncing ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`}
+      />
+      <span>{isAnnouncing ? 'Anunciando en red' : 'Esperando red'}</span>
+    </span>
+  );
+}
