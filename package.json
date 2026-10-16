@@ -17,13 +17,18 @@
     "@capacitor/android": "^8.5.2",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.2",
+    "@distube/ytdl-core": "^4.16.12",
+    "@types/crypto-js": "^4.2.2",
     "clsx": "^2.1.1",
+    "crypto-js": "^4.2.0",
     "lucide-react": "^1.52.0",
+    "peerjs": "^1.5.5",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tailwind-merge": "^3.7.0",
-    "ws": "^8.22.0"
+    "ws": "^8.22.0",
+    "youtubei.js": "^18.1.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",

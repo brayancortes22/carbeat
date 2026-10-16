@@ -154,10 +154,14 @@ export function startHostScanner(
           const data = JSON.parse(event.data);
           if (data.type === 'HOST_ANNOUNCE') {
             if (data.announcerId === announcerId) return;
+            const resolvedIp =
+              (data.hostIp === 'localhost' || data.hostIp === '127.0.0.1') && window.location.hostname !== 'localhost'
+                ? window.location.hostname
+                : data.hostIp;
             const host: DiscoveredHost = {
               roomId: data.roomId,
               roomName: data.roomName,
-              hostIp: data.hostIp,
+              hostIp: resolvedIp,
               port: data.port || 5173,
               lastSeen: Date.now(),
               djCount: data.djCount || 0,
@@ -194,10 +198,14 @@ export function startHostScanner(
         const data = event.data;
         if (data.type === 'HOST_ANNOUNCE') {
           if (data.announcerId === announcerId) return;
+          const resolvedIp =
+            (data.hostIp === 'localhost' || data.hostIp === '127.0.0.1') && window.location.hostname !== 'localhost'
+              ? window.location.hostname
+              : data.hostIp;
           const host: DiscoveredHost = {
             roomId: data.roomId,
             roomName: data.roomName,
-            hostIp: data.hostIp,
+            hostIp: resolvedIp,
             port: data.port || 5173,
             lastSeen: Date.now(),
             djCount: data.djCount || 0,

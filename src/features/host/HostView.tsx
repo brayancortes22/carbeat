@@ -27,8 +27,9 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   const [connectedDjs, setConnectedDjs] = useState<string[]>([]);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isAnnouncing, setIsAnnouncing] = useState(false);
+  const [hostLanIp, setHostLanIp] = useState(window.location.hostname);
 
-  const channel = useMemo(() => new RoomChannel(roomId), [roomId]);
+  const channel = useMemo(() => new RoomChannel(roomId, true), [roomId]);
 
   // Refs para uso en callbacks sin causar re-renders
   const queueRef = useRef(queue);
@@ -115,16 +116,28 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     };
   }, [channel]);
 
+  // Obtener IP LAN del servidor local para que los celulares se conecten sin fallos
+  useEffect(() => {
+    fetch('/api/server-info')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ips && Array.isArray(data.ips) && data.ips.length > 0) {
+          setHostLanIp(data.ips[0]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Anunciar presencia del Host por WebSocket de descubrimiento (/ws-discovery)
   // Esto permite que los celulares encuentren el carro en la misma red Wi-Fi
   useEffect(() => {
     setIsAnnouncing(true);
-    startHostAnnouncer(roomId, `Carro ${roomId}`, window.location.hostname, connectedDjs.length);
+    startHostAnnouncer(roomId, `Carro ${roomId}`, hostLanIp, connectedDjs.length);
     return () => {
       setIsAnnouncing(false);
       stopHostAnnouncer();
     };
-  }, [roomId, connectedDjs.length]);
+  }, [roomId, hostLanIp, connectedDjs.length]);
 
   // Sincronizar cola con DJs cuando cambia
   useEffect(() => {
