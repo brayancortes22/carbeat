@@ -17,8 +17,8 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json([]);
     }
 
-    // Buscar mezclas, canciones similares o éxitos del mismo estilo/artista
-    const query = `${artist} canciones similares ${title}`.trim();
+    // Buscar canciones y éxitos oficiales afines
+    const query = `${artist} ${title} cancion`.trim();
 
     const ytRes = await fetch('https://music.youtube.com/youtubei/v1/search', {
       method: 'POST',
@@ -58,6 +58,8 @@ export default async function handler(req: any, res: any) {
         const songTitle = runs0.map((r: any) => r.text).join('').trim();
         const runs1 = item.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
         const subtitle = runs1.map((r: any) => r.text).join('').trim();
+        const itemType = runs1[0]?.text?.toLowerCase()?.trim() || '';
+
         const videoId =
           item.playlistItemData?.videoId ||
           item.doubleTapData?.playlistItemData?.videoId ||
@@ -65,8 +67,39 @@ export default async function handler(req: any, res: any) {
         const thumbs = item.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
         let cover = thumbs[thumbs.length - 1]?.url;
         if (cover && cover.startsWith('//')) cover = `https:${cover}`;
+        if (cover) cover = cover.replace(/=w\d+-h\d+/, '=w300-h300');
 
         if (songTitle && videoId) {
+          // Filtro estricto: Descartar si es un video, podcast, lista, mix, perfil o álbum
+          const isNonSong =
+            itemType.includes('vídeo') ||
+            itemType.includes('video') ||
+            itemType.includes('episodio') ||
+            itemType.includes('pódcast') ||
+            itemType.includes('podcast') ||
+            itemType.includes('lista') ||
+            itemType.includes('perfil') ||
+            itemType.includes('artista') ||
+            itemType.includes('álbum') ||
+            itemType.includes('album') ||
+            itemType.includes('canal');
+
+          const lowerTitle = songTitle.toLowerCase();
+          const isVideoTitle =
+            lowerTitle.includes('video oficial') ||
+            lowerTitle.includes('official video') ||
+            lowerTitle.includes('videoclip') ||
+            lowerTitle.includes('(letra)') ||
+            lowerTitle.includes('[letra]') ||
+            lowerTitle.includes('lyrics') ||
+            lowerTitle.includes('mix') ||
+            lowerTitle.includes('1 hora') ||
+            lowerTitle.includes('en vivo') ||
+            lowerTitle.includes('entrevista') ||
+            lowerTitle.includes('podcast');
+
+          if (isNonSong || isVideoTitle) continue;
+
           // Omitir si es exactamente la misma canción que ya está sonando
           if (
             songTitle.toLowerCase().trim() === title.toLowerCase().trim() &&
@@ -75,10 +108,18 @@ export default async function handler(req: any, res: any) {
             continue;
           }
 
+          // Extraer nombre real y limpio del artista
+          let cleanArtist = artist || 'Artista';
+          if (runs1.length >= 3 && itemType === 'canción') {
+            cleanArtist = runs1[2]?.text?.trim() || cleanArtist;
+          } else {
+            cleanArtist = subtitle.replace(/^(Canción|Video|Vídeo)\s*•\s*/i, '').split('•')[0]?.trim() || cleanArtist;
+          }
+
           songs.push({
             id: `yt_${videoId}`,
             title: songTitle,
-            artist: subtitle.split('•')[0]?.trim() || artist || 'YouTube Music',
+            artist: cleanArtist,
             album: 'YouTube Music',
             duration: 210,
             coverUrl: cover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&h=300&fit=crop',

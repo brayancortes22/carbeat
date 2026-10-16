@@ -22,8 +22,12 @@ interface DiscoveredHost {
 }
 
 export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj }) => {
-  const [roomIdInput, setRoomIdInput] = useState('BEAT-784');
-  const [djNameInput, setDjNameInput] = useState('');
+  const [roomIdInput, setRoomIdInput] = useState(() => {
+    return localStorage.getItem('carbeat_last_room') || '';
+  });
+  const [djNameInput, setDjNameInput] = useState(() => {
+    return localStorage.getItem('carbeat_last_dj_name') || '';
+  });
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isCheckingRoom, setIsCheckingRoom] = useState(false);
   const [roomError, setRoomError] = useState<string | null>(null);
@@ -53,6 +57,8 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj
     }
 
     const name = djNameInput.trim() || `DJ_${Math.floor(Math.random() * 900 + 100)}`;
+    localStorage.setItem('carbeat_last_room', code);
+    localStorage.setItem('carbeat_last_dj_name', name);
     onJoinDj(code, name, undefined, undefined);
   };
 
@@ -115,7 +121,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj
                     type="text"
                     value={roomIdInput}
                     onChange={(e) => setRoomIdInput(e.target.value.toUpperCase())}
-                    placeholder="EJ: BEAT-784"
+                    placeholder="EJ: CAR-412 o BEAT-890"
                     className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl px-3.5 py-2.5 text-sm font-mono text-cyan-300 focus:outline-none focus:border-purple-500/80 transition-colors uppercase"
                     required
                   />

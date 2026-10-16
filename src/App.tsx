@@ -5,9 +5,16 @@ import { DjView } from './features/dj/DjView';
 
 type AppMode = 'landing' | 'host' | 'dj';
 
+const generateRoomId = (): string => {
+  const prefixes = ['BEAT', 'CAR', 'RIDE', 'VIBE', 'AUTO'];
+  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+  const num = Math.floor(100 + Math.random() * 900);
+  return `${prefix}-${num}`;
+};
+
 export const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>('landing');
-  const [roomId, setRoomId] = useState('BEAT-784');
+  const [roomId, setRoomId] = useState(() => generateRoomId());
   const [djName, setDjName] = useState('DJ_Copiloto');
   const [hostIp, setHostIp] = useState<string | undefined>(undefined);
   const [hostPort, setHostPort] = useState<number | undefined>(undefined);
@@ -23,6 +30,8 @@ export const App: React.FC = () => {
   }, []);
 
   const handleSelectHost = () => {
+    const freshRoom = generateRoomId();
+    setRoomId(freshRoom);
     setMode('host');
   };
 
