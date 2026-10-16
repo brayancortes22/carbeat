@@ -1,14 +1,19 @@
 import React from 'react';
-import { QueueItem } from '../../../types/track.types';
-import { Badge } from '../../../components/ui/Badge';
-import { Trash2, ThumbsUp, Music } from 'lucide-react';
+import { QueueItem, Track } from '../../../types/track.types';
+import { Trash2, ThumbsUp, Music, BookmarkPlus } from 'lucide-react';
+import { TrackOriginBadge } from './TrackOriginBadge';
 
 interface HostQueueListProps {
   queue: QueueItem[];
   onRemoveItem: (queueId: string) => void;
+  onSaveToLibrary?: (track: Track) => void;
 }
 
-export const HostQueueList: React.FC<HostQueueListProps> = ({ queue, onRemoveItem }) => {
+export const HostQueueList: React.FC<HostQueueListProps> = ({
+  queue,
+  onRemoveItem,
+  onSaveToLibrary,
+}) => {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3">
@@ -22,7 +27,7 @@ export const HostQueueList: React.FC<HostQueueListProps> = ({ queue, onRemoveIte
         {queue.length === 0 ? (
           <div className="h-40 flex flex-col items-center justify-center text-center text-slate-500 text-xs">
             <p>La cola está vacía.</p>
-            <p className="text-[10px] text-slate-600 mt-1">Los DJs pueden pedir canciones desde su celular.</p>
+            <p className="text-[10px] text-slate-600 mt-1">Los DJs pueden pedir canciones desde su celular o activar Autopilot IA.</p>
           </div>
         ) : (
           queue.map((item, idx) => (
@@ -36,14 +41,21 @@ export const HostQueueList: React.FC<HostQueueListProps> = ({ queue, onRemoveIte
                   <h4 className="text-sm font-semibold text-white truncate">{item.track.title}</h4>
                   <p className="text-xs text-slate-400 truncate">{item.track.artist}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <Badge variant={item.track.source === 'passenger_dj' ? 'purple' : 'slate'} className="text-[9px] py-0 px-1.5">
-                      {item.requestedBy}
-                    </Badge>
+                    <TrackOriginBadge track={item.track} requestedBy={item.requestedBy} />
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
+                {onSaveToLibrary && (
+                  <button
+                    onClick={() => onSaveToLibrary(item.track)}
+                    title="Guardar en mi biblioteca de chofer"
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors cursor-pointer"
+                  >
+                    <BookmarkPlus className="w-4 h-4" />
+                  </button>
+                )}
                 <div className="flex items-center gap-1 text-xs font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-800/40 px-2 py-0.5 rounded-md">
                   <ThumbsUp className="w-3 h-3" />
                   <span>{item.votes}</span>
@@ -51,7 +63,7 @@ export const HostQueueList: React.FC<HostQueueListProps> = ({ queue, onRemoveIte
                 <button
                   onClick={() => onRemoveItem(item.queueId)}
                   title="Eliminar de la cola"
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

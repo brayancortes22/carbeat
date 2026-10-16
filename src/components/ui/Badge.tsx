@@ -6,12 +6,16 @@ interface BadgeProps {
   children: React.ReactNode;
   variant?: 'cyan' | 'purple' | 'emerald' | 'amber' | 'slate';
   className?: string;
+  onClick?: () => void;
+  title?: string;
 }
 
 export const Badge: React.FC<BadgeProps> = ({
   children,
   variant = 'cyan',
   className,
+  onClick,
+  title,
 }) => {
   const variantStyles = {
     cyan: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
@@ -23,6 +27,8 @@ export const Badge: React.FC<BadgeProps> = ({
 
   return (
     <span
+      onClick={onClick}
+      title={title}
       className={twMerge(
         clsx(
           'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border tracking-wide uppercase',
