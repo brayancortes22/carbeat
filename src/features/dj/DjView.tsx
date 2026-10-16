@@ -46,14 +46,18 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
 
   // Construir URL del WebSocket: si hay hostIp, conectar al carro remoto; si no, usar localhost
   const wsUrl = useMemo(() => {
-    if (hostIp && hostPort) {
+    const effectiveIp =
+      (hostIp === 'localhost' || hostIp === '127.0.0.1') && window.location.hostname !== 'localhost'
+        ? window.location.hostname
+        : hostIp;
+    if (effectiveIp && hostPort) {
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${proto}//${hostIp}:${hostPort}/ws-rooms`;
+      return `${proto}//${effectiveIp}:${hostPort}/ws-rooms`;
     }
     return undefined;
   }, [hostIp, hostPort]);
 
-  const channel = useMemo(() => new RoomChannel(roomId, wsUrl), [roomId, wsUrl]);
+  const channel = useMemo(() => new RoomChannel(roomId, false, wsUrl), [roomId, wsUrl]);
 
   const isConnectedRef = useRef(isConnected);
   isConnectedRef.current = isConnected;

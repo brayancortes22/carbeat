@@ -10,6 +10,7 @@ export interface Track {
   source: TrackSource;
   addedBy?: string; // Nombre del DJ que la aportó
   audioUrl: string; // URL local (blob, http o file)
+  videoId?: string; // ID de video de YouTube para reproducción completa
 }
 
 export interface QueueItem {

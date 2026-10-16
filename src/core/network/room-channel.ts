@@ -1,4 +1,5 @@
 import { RoomEventType, RoomMessage } from '../../types/room.types';
+import { PeerChannel } from './peer-channel';
 
 type MessageHandler = (msg: RoomMessage) => void;
 
@@ -11,19 +12,28 @@ export function getDefaultWsUrl(): string {
   return `${proto}//${window.location.host}/ws-rooms`;
 }
 
+/**
+ * Canal Híbrido Tri-Capa (OmniRoute Pattern):
+ * Capa 1: WebSocket local (ultra baja latencia en red local/hotspot).
+ * Capa 2: WebRTC P2P vía PeerJS (funciona en Vercel, redes móviles o sin backend).
+ * Capa 3: BroadcastChannel (comunicación inter-pestañas en el mismo navegador).
+ */
 export class RoomChannel {
   private roomId: string;
   private ws: WebSocket | null = null;
+  private peerChannel: PeerChannel | null = null;
   private broadcast: BroadcastChannel | null = null;
   private handlers: Set<MessageHandler> = new Set();
   private pendingQueue: string[] = [];
+  private seenMessages: Set<string> = new Set();
   private isConnected = false;
   private isClosed = false;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(roomId: string, wsUrl: string = getDefaultWsUrl()) {
+  constructor(roomId: string, isHost = false, wsUrl: string = getDefaultWsUrl()) {
     this.roomId = roomId;
     this.initBroadcast();
+    this.initPeerChannel(isHost);
     if (wsUrl) {
       this.initWebSocket(wsUrl);
     }
@@ -35,13 +45,27 @@ export class RoomChannel {
         this.broadcast = new BroadcastChannel(`carbeat_room_${this.roomId}`);
         this.broadcast.onmessage = (event) => {
           const msg = event.data as RoomMessage & { _clientId?: string };
-          // Ignorar mensajes que nosotros mismos enviamos por BroadcastChannel
           if (msg._clientId === CLIENT_ID) return;
-          this.dispatch(msg);
+          this.handleIncoming(msg);
         };
       } catch (err) {
         console.warn('[RoomChannel] BroadcastChannel init error:', err);
       }
+    }
+  }
+
+  private initPeerChannel(isHost: boolean): void {
+    try {
+      this.peerChannel = new PeerChannel(this.roomId, isHost);
+      this.peerChannel.onMessage((data) => {
+        if (data && typeof data === 'object' && data.type) {
+          const msg = data as RoomMessage & { _clientId?: string };
+          if (msg._clientId === CLIENT_ID) return;
+          this.handleIncoming(msg);
+        }
+      });
+    } catch (err) {
+      console.warn('[RoomChannel] PeerChannel init error:', err);
     }
   }
 
@@ -52,7 +76,6 @@ export class RoomChannel {
       this.ws.onopen = () => {
         this.isConnected = true;
         console.log('[RoomChannel] WS conectado a la sala:', this.roomId);
-        // Vaciar inmediatamente todos los mensajes acumulados mientras conectaba
         while (this.pendingQueue.length > 0 && this.ws?.readyState === WebSocket.OPEN) {
           const pending = this.pendingQueue.shift();
           if (pending) this.ws.send(pending);
@@ -62,8 +85,7 @@ export class RoomChannel {
       this.ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as RoomMessage;
-          // No filtrar por clientId en WS - el servidor ya excluye al remitente
-          this.dispatch(msg);
+          this.handleIncoming(msg);
         } catch (e) {
           console.error('[RoomChannel] Error parseando JSON de WS:', e);
         }
@@ -74,28 +96,29 @@ export class RoomChannel {
         if (!this.isClosed) {
           this.reconnectTimeout = setTimeout(() => {
             if (!this.isClosed) this.initWebSocket(url);
-          }, 1500);
+          }, 2000);
         }
       };
 
       this.ws.onerror = () => {
-        console.warn('[RoomChannel] WS connection error, intentando reconectar...');
         this.isConnected = false;
-        if (!this.isClosed && !this.reconnectTimeout) {
-          this.reconnectTimeout = setTimeout(() => {
-            if (!this.isClosed) this.initWebSocket(url);
-          }, 1500);
-        }
       };
-    } catch (e) {
-      console.warn('[RoomChannel] Fallo iniciando WebSocket:', e);
+    } catch {
       this.isConnected = false;
-      if (!this.isClosed && !this.reconnectTimeout) {
-        this.reconnectTimeout = setTimeout(() => {
-          if (!this.isClosed) this.initWebSocket(url);
-        }, 1500);
-      }
     }
+  }
+
+  private handleIncoming(msg: RoomMessage): void {
+    const dedupeKey = `${msg.type}_${msg.senderId}_${msg.timestamp}`;
+    if (this.seenMessages.has(dedupeKey)) return;
+    this.seenMessages.add(dedupeKey);
+
+    if (this.seenMessages.size > 200) {
+      const first = this.seenMessages.values().next().value;
+      if (first) this.seenMessages.delete(first);
+    }
+
+    this.dispatch(msg);
   }
 
   public send<T>(type: RoomEventType, senderId: string, senderName: string, payload: T): void {
@@ -113,27 +136,31 @@ export class RoomChannel {
 
     const rawString = JSON.stringify(msg);
 
-    // Si el socket ya está abierto, enviar inmediatamente
+    // 1. Enviar por WebSocket si está conectado
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(rawString);
-      } catch (err) {
-        console.warn('[RoomChannel] Error enviando por WS:', err);
+      } catch {
         this.pendingQueue.push(rawString);
       }
     } else {
-      // Si aún está conectando, encolar para enviar apenas abra
       this.pendingQueue.push(rawString);
     }
 
-    // Difundir también en canal local por si hay pestañas hermanas
-    try {
-      if (!this.broadcast) {
-        this.initBroadcast();
+    // 2. Enviar por canal P2P WebRTC
+    if (this.peerChannel) {
+      try {
+        this.peerChannel.send(msg);
+      } catch {
+        /* ignore */
       }
+    }
+
+    // 3. Difundir por canal local BroadcastChannel
+    try {
       this.broadcast?.postMessage(msg);
     } catch {
-      // Ignorar de forma segura
+      /* ignore */
     }
   }
 
@@ -162,11 +189,16 @@ export class RoomChannel {
       try { this.ws.close(); } catch { /* ignore */ }
       this.ws = null;
     }
+    if (this.peerChannel) {
+      try { this.peerChannel.close(); } catch { /* ignore */ }
+      this.peerChannel = null;
+    }
     if (this.broadcast) {
       try { this.broadcast.close(); } catch { /* ignore */ }
       this.broadcast = null;
     }
     this.handlers.clear();
+    this.seenMessages.clear();
     this.pendingQueue = [];
   }
 

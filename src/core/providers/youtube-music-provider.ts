@@ -68,6 +68,7 @@ export class YouTubeMusicProvider {
               addedBy: djName,
               coverUrl: bestThumbnail,
               audioUrl: `${instance}/latest_version?id=${item.videoId}&itag=140`,
+              videoId: item.videoId,
             };
           });
       } catch {
