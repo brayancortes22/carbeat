@@ -2,11 +2,15 @@ import { Track, QueueItem } from '../src/types/track.types';
 
 interface RoomState {
   roomId: string;
+  roomName: string;
+  hostIp: string;
+  hostLastSeen: number;
   currentTrack: Track | null;
   isPlaying: boolean;
   currentTime: number;
   duration: number;
   queue: QueueItem[];
+  djs: Record<string, number>; // djName -> lastSeen timestamp
   lastUpdated: number;
 }
 
@@ -22,45 +26,122 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
+  const action = (req.query?.action as string) || '';
+  const now = Date.now();
+
+  // Limpiar periódicamente salas inactivas (más de 60 segundos sin señal del host)
+  for (const [id, r] of roomsStore.entries()) {
+    if (now - r.hostLastSeen > 60000) {
+      roomsStore.delete(id);
+    }
+  }
+
+  // 1. Descubrimiento de Carros en Vivo (Escáner Wi-Fi / Red)
+  if (action === 'discover') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    const activeRooms: any[] = [];
+    for (const r of roomsStore.values()) {
+      if (now - r.hostLastSeen < 35000) {
+        // Purgar DJs inactivos (más de 8 segundos sin latido)
+        const activeDjs = Object.entries(r.djs).filter(([_, time]) => now - time < 8000);
+        activeRooms.push({
+          roomId: r.roomId,
+          roomName: r.roomName || `CarBeat ${r.roomId}`,
+          hostIp: r.hostIp || 'Nube Vercel',
+          djCount: activeDjs.length,
+          lastSeen: r.hostLastSeen,
+        });
+      }
+    }
+    return res.status(200).json(activeRooms);
+  }
+
   const roomId = ((req.query?.roomId as string) || 'BEAT-784').toUpperCase();
 
-  // Obtener o inicializar sala
-  if (!roomsStore.has(roomId)) {
-    roomsStore.set(roomId, {
-      roomId,
-      currentTrack: null,
-      isPlaying: false,
-      currentTime: 0,
-      duration: 0,
-      queue: [],
-      lastUpdated: Date.now(),
+  // 2. GET: Consulta de estado de sala y verificación de existencia
+  if (req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    const existing = roomsStore.get(roomId);
+
+    // Si la sala no existe o su host lleva más de 35s desconectado
+    if (!existing || now - existing.hostLastSeen > 35000) {
+      return res.status(200).json({
+        exists: false,
+        error: `La sala "${roomId}" no existe o el vehículo está desconectado.`,
+      });
+    }
+
+    // Purgar DJs inactivos
+    const activeDjCount = Object.values(existing.djs).filter((t) => now - t < 8000).length;
+
+    return res.status(200).json({
+      exists: true,
+      ...existing,
+      djCount: activeDjCount,
     });
   }
 
-  const room = roomsStore.get(roomId)!;
-
-  // GET: Obtener estado actual de la sala
-  if (req.method === 'GET') {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    return res.status(200).json(room);
-  }
-
-  // POST: Mutaciones y sincronización
+  // 3. POST: Mutaciones, Registro de Host, Heartbeats y Cola
   if (req.method === 'POST') {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
       const { type, payload } = body;
 
+      // Obtener o registrar sala
+      if (!roomsStore.has(roomId)) {
+        roomsStore.set(roomId, {
+          roomId,
+          roomName: `CarBeat ${roomId}`,
+          hostIp: 'Nube Vercel',
+          hostLastSeen: Date.now(),
+          currentTrack: null,
+          isPlaying: false,
+          currentTime: 0,
+          duration: 0,
+          queue: [],
+          djs: {},
+          lastUpdated: Date.now(),
+        });
+      }
+
+      const room = roomsStore.get(roomId)!;
+
+      // A) Anuncio del Host (Pantalla del Carro)
+      if (type === 'HOST_ANNOUNCE') {
+        room.hostLastSeen = Date.now();
+        if (payload?.roomName) room.roomName = payload.roomName;
+        if (payload?.hostIp) room.hostIp = payload.hostIp;
+        room.lastUpdated = Date.now();
+        return res.status(200).json({ ok: true, roomId });
+      }
+
+      // B) Heartbeat de DJ (Pasajero activo)
+      if (type === 'DJ_HEARTBEAT' && payload?.djName) {
+        room.djs[payload.djName] = Date.now();
+        return res.status(200).json({ ok: true });
+      }
+
+      // C) DJ Abandona la sala
+      if (type === 'ROOM_LEAVE' && payload?.djName) {
+        delete room.djs[payload.djName];
+        return res.status(200).json({ ok: true });
+      }
+
+      // D) Pedir canción a la cola (Deduplicación estricta y suma de votos)
       if (type === 'QUEUE_TRACK' && payload?.track) {
         const track: Track = payload.track;
         const requestedBy: string = payload.requestedBy || 'DJ Pasajero';
 
-        // Evitar duplicar la misma canción en la cola
-        const alreadyInQueue = room.queue.some(
-          (item) => item.track.id === track.id || item.track.title.toLowerCase() === track.title.toLowerCase()
+        // Buscar si ya existe la pista en la cola
+        const existingItem = room.queue.find(
+          (item) =>
+            item.track.id === track.id ||
+            item.track.title.toLowerCase().trim() === track.title.toLowerCase().trim()
         );
 
-        if (!alreadyInQueue) {
+        if (existingItem) {
+          existingItem.votes += 1;
+        } else {
           const newItem: QueueItem = {
             queueId: `q_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
             track,
@@ -76,13 +157,15 @@ export default async function handler(req: any, res: any) {
             room.duration = track.duration || 210;
           } else {
             room.queue.push(newItem);
-            room.queue.sort((a, b) => b.votes - a.votes);
           }
         }
+
+        room.queue.sort((a, b) => b.votes - a.votes);
         room.lastUpdated = Date.now();
         return res.status(200).json(room);
       }
 
+      // E) Votación de canciones
       if (type === 'VOTE_TRACK' && payload?.queueId) {
         room.queue = room.queue
           .map((item) =>
@@ -95,12 +178,27 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json(room);
       }
 
-      if (type === 'SYNC_STATE' && payload) {
+      // F) Sincronización del Host
+      if ((type === 'SYNC_CATALOG' || type === 'SYNC_STATE' || type === 'PLAYBACK_STATE') && payload) {
+        room.hostLastSeen = Date.now();
         if (payload.currentTrack !== undefined) room.currentTrack = payload.currentTrack;
         if (payload.isPlaying !== undefined) room.isPlaying = payload.isPlaying;
         if (payload.currentTime !== undefined) room.currentTime = payload.currentTime;
         if (payload.duration !== undefined) room.duration = payload.duration;
-        if (Array.isArray(payload.queue)) room.queue = payload.queue;
+        if (Array.isArray(payload.queue)) {
+          // Deduplicar estrictamente la cola recibida del host
+          const seen = new Set<string>();
+          room.queue = payload.queue
+            .filter((item: any) => {
+              if (!item?.track?.title) return false;
+              const key = `${item.track.title.toLowerCase().trim()}_${(item.track.artist || '').toLowerCase().trim()}`;
+              if (seen.has(key) || seen.has(item.track.id)) return false;
+              seen.add(key);
+              seen.add(item.track.id);
+              return true;
+            })
+            .sort((a: any, b: any) => b.votes - a.votes);
+        }
         room.lastUpdated = Date.now();
         return res.status(200).json(room);
       }

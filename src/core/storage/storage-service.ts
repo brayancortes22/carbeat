@@ -1,8 +1,8 @@
 import { Track, QueueItem } from '../../types/track.types';
 
 const STORAGE_KEYS = {
-  CATALOG: 'carbeat_local_catalog_v2', // v2: purga limpia de duplicados
-  QUEUE: 'carbeat_local_queue_v2',
+  CATALOG: 'carbeat_local_catalog_v3',
+  QUEUE: 'carbeat_local_queue_v3', // v3: purga automática de cualquier cola sucia previa
   ROOM_ID: 'carbeat_saved_room_id',
   DJ_NAME: 'carbeat_saved_dj_name',
 } as const;
@@ -13,7 +13,7 @@ export class StorageService {
     const result: Track[] = [];
     for (const t of tracks) {
       if (!t || !t.title) continue;
-      const key = `${t.title.toLowerCase().trim()}_${t.artist.toLowerCase().trim()}`;
+      const key = `${t.title.toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`;
       if (!seen.has(key) && !seen.has(t.id)) {
         seen.add(key);
         seen.add(t.id);
@@ -21,6 +21,22 @@ export class StorageService {
       }
     }
     return result;
+  }
+
+  public static deduplicateQueue(queue: QueueItem[]): QueueItem[] {
+    const seen = new Set<string>();
+    const cleanQueue: QueueItem[] = [];
+    for (const item of queue) {
+      if (!item?.track?.title) continue;
+      const key = `${item.track.title.toLowerCase().trim()}_${(item.track.artist || '').toLowerCase().trim()}`;
+      if (!seen.has(key) && !seen.has(item.track.id) && !seen.has(item.queueId)) {
+        seen.add(key);
+        seen.add(item.track.id);
+        seen.add(item.queueId);
+        cleanQueue.push(item);
+      }
+    }
+    return cleanQueue.sort((a, b) => b.votes - a.votes);
   }
 
   public static saveCatalog(tracks: Track[]): void {
@@ -48,16 +64,7 @@ export class StorageService {
   public static saveQueue(queue: QueueItem[]): void {
     try {
       if (typeof window === 'undefined') return;
-      // Deduplicar cola por ID o por título de canción
-      const seen = new Set<string>();
-      const cleanQueue = queue.filter((item) => {
-        if (!item?.track?.title) return false;
-        const key = item.track.title.toLowerCase().trim();
-        if (seen.has(key) || seen.has(item.queueId)) return false;
-        seen.add(key);
-        seen.add(item.queueId);
-        return true;
-      });
+      const cleanQueue = this.deduplicateQueue(queue);
       localStorage.setItem(STORAGE_KEYS.QUEUE, JSON.stringify(cleanQueue));
     } catch (e) {
       console.warn('[StorageService] Error guardando cola en localStorage:', e);
@@ -70,7 +77,7 @@ export class StorageService {
       const data = localStorage.getItem(STORAGE_KEYS.QUEUE);
       if (!data) return [];
       const parsed = JSON.parse(data) as QueueItem[];
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? this.deduplicateQueue(parsed) : [];
     } catch {
       return [];
     }

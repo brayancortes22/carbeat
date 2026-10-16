@@ -151,6 +151,26 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     });
   }, [queue, channel]);
 
+  const djHeartbeatsRef = useRef<Map<string, number>>(new Map());
+
+  // Limpiar periódicamente DJs que cerraron la pestaña o se desconectaron (más de 8s sin señal)
+  useEffect(() => {
+    const cleaner = setInterval(() => {
+      const now = Date.now();
+      let changed = false;
+      for (const [name, lastSeen] of djHeartbeatsRef.current.entries()) {
+        if (now - lastSeen > 8000) {
+          djHeartbeatsRef.current.delete(name);
+          changed = true;
+        }
+      }
+      if (changed) {
+        setConnectedDjs(Array.from(djHeartbeatsRef.current.keys()));
+      }
+    }, 2500);
+    return () => clearInterval(cleaner);
+  }, []);
+
   // Escuchar mensajes entrantes de los DJs
   useEffect(() => {
     const unsubChannel = channel.subscribe((msg) => {
@@ -162,13 +182,32 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
         catalogRef.current = updatedCatalog;
         setCatalog(updatedCatalog);
 
-        const isAlreadyInQueue = queueRef.current.some(
+        // Si ya está en cola -> Sumar +1 voto y reordenar por votos
+        const existingIndex = queueRef.current.findIndex(
           (item) =>
             item.track.id === payload.track.id ||
             item.track.title.toLowerCase().trim() === payload.track.title.toLowerCase().trim()
         );
 
-        if (isAlreadyInQueue) return;
+        if (existingIndex >= 0) {
+          const updated = [...queueRef.current];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            votes: updated[existingIndex].votes + 1,
+          };
+          const sorted = StorageService.deduplicateQueue(updated);
+          queueRef.current = sorted;
+          setQueue(sorted);
+          channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
+            catalog: catalogRef.current,
+            queue: sorted,
+            currentTrack: playerStateRef.current.currentTrack,
+            isPlaying: playerStateRef.current.isPlaying,
+            currentTime: playerStateRef.current.currentTime,
+            duration: playerStateRef.current.duration,
+          });
+          return;
+        }
 
         const newItem: QueueItem = {
           queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -191,7 +230,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
           nextPlayingTrack = newItem.track;
         } else {
           // Si ya hay una canción sonando o cargada, añadir a la cola ordenada por votos
-          finalQueue = [...queueRef.current, newItem].sort((a, b) => b.votes - a.votes);
+          finalQueue = StorageService.deduplicateQueue([...queueRef.current, newItem]);
         }
 
         queueRef.current = finalQueue;
@@ -223,7 +262,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
         });
       } else if (msg.type === 'NEW_TRACK_OFFER') {
         const payload = msg.payload as { track: Track };
-        const updatedCatalog = [payload.track, ...catalogRef.current];
+        const updatedCatalog = StorageService.deduplicateTracks([payload.track, ...catalogRef.current]);
         catalogRef.current = updatedCatalog;
         setCatalog(updatedCatalog);
         channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
@@ -234,11 +273,12 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
           currentTime: playerStateRef.current.currentTime,
           duration: playerStateRef.current.duration,
         });
-      } else if (msg.type === 'ROOM_JOIN') {
+      } else if (msg.type === 'ROOM_JOIN' || (msg.type as any) === 'DJ_HEARTBEAT') {
         if (msg.senderName) {
-          setConnectedDjs((prev) => (prev.includes(msg.senderName!) ? prev : [...prev, msg.senderName!]));
+          djHeartbeatsRef.current.set(msg.senderName, Date.now());
+          setConnectedDjs(Array.from(djHeartbeatsRef.current.keys()));
         }
-        // Responder inmediatamente enviando catálogo, cola y estado actual de reproducción
+        // Responder enviando catálogo, cola y estado actual de reproducción
         channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
           catalog: catalogRef.current,
           queue: queueRef.current,
@@ -247,6 +287,11 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
           currentTime: playerStateRef.current.currentTime,
           duration: playerStateRef.current.duration,
         });
+      } else if ((msg.type as any) === 'ROOM_LEAVE') {
+        if (msg.senderName) {
+          djHeartbeatsRef.current.delete(msg.senderName);
+          setConnectedDjs(Array.from(djHeartbeatsRef.current.keys()));
+        }
       }
     });
 
