@@ -11,7 +11,11 @@ export type RoomEventType =
   | 'PLAYBACK_STATE'
   | 'HOST_COMMAND'
   | 'NEW_TRACK_OFFER'
-  | 'HOST_ANNOUNCE';
+  | 'HOST_ANNOUNCE'
+  | 'CLOSE_ROOM'
+  | 'PURGE_QUEUE'
+  | 'DJ_HEARTBEAT'
+  | 'ROOM_LEAVE';
 
 export interface RoomMessage<T = unknown> {
   type: RoomEventType;

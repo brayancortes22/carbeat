@@ -106,7 +106,20 @@ export default async function handler(req: any, res: any) {
 
       const room = roomsStore.get(roomId)!;
 
-      // A) Anuncio del Host (Pantalla del Carro)
+      // A) Cierre de Sala por el Chofer (Detener y expulsar a todos)
+      if (type === 'CLOSE_ROOM' || type === 'ROOM_CLOSED') {
+        roomsStore.delete(roomId);
+        return res.status(200).json({ ok: true, closed: true, message: 'Sala cerrada por el conductor' });
+      }
+
+      // B) Purga de un tacazo de la cola de peticiones
+      if (type === 'PURGE_QUEUE') {
+        room.queue = [];
+        room.lastUpdated = Date.now();
+        return res.status(200).json(room);
+      }
+
+      // C) Anuncio del Host (Pantalla del Carro)
       if (type === 'HOST_ANNOUNCE') {
         room.hostLastSeen = Date.now();
         if (payload?.roomName) room.roomName = payload.roomName;

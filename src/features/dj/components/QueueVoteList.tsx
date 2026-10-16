@@ -1,7 +1,7 @@
 import React from 'react';
 import { QueueItem } from '../../../types/track.types';
 import { ThumbsUp, ThumbsDown, Flame } from 'lucide-react';
-import { Badge } from '../../../components/ui/Badge';
+import { TrackOriginBadge } from '../../host/components/TrackOriginBadge';
 
 interface QueueVoteListProps {
   queue: QueueItem[];
@@ -49,9 +49,7 @@ export const QueueVoteList: React.FC<QueueVoteListProps> = ({ queue, onVote }) =
                   <div className="flex items-center gap-1.5 text-xs text-slate-400">
                     <span className="truncate">{item.track.artist}</span>
                     <span>•</span>
-                    <Badge variant="purple" className="text-[9px] py-0 px-1">
-                      {item.requestedBy}
-                    </Badge>
+                    <TrackOriginBadge requestedBy={item.requestedBy} isAutopilot={item.isAutopilot} />
                   </div>
                 </div>
               </div>
