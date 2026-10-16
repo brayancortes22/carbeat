@@ -9,23 +9,35 @@ interface QueueVoteListProps {
 }
 
 export const QueueVoteList: React.FC<QueueVoteListProps> = ({ queue, onVote }) => {
+  // Salvaguarda visual defensiva: garantizar que jamás se renderice una pista duplicada
+  const seen = new Set<string>();
+  const cleanList = queue.filter((item) => {
+    if (!item?.track?.title) return false;
+    const key = `${item.track.title.toLowerCase().trim()}_${(item.track.artist || '').toLowerCase().trim()}`;
+    if (seen.has(key) || seen.has(item.track.id) || seen.has(item.queueId)) return false;
+    seen.add(key);
+    seen.add(item.track.id);
+    seen.add(item.queueId);
+    return true;
+  });
+
   return (
     <div className="flex flex-col h-full space-y-2">
       <div className="flex items-center justify-between pb-2 border-b border-white/10">
         <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-          <Flame className="w-4 h-4 text-amber-400" /> Próximas en sonar ({queue.length})
+          <Flame className="w-4 h-4 text-amber-400" /> Próximas en sonar ({cleanList.length})
         </h3>
         <span className="text-[10px] text-slate-500">Vota para cambiar el orden</span>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-        {queue.length === 0 ? (
+        {cleanList.length === 0 ? (
           <div className="h-32 flex flex-col items-center justify-center text-center text-slate-500 text-xs">
             <p>No hay canciones en la cola.</p>
             <p className="text-[10px] text-slate-600 mt-0.5">Explora el catálogo y pide la primera.</p>
           </div>
         ) : (
-          queue.map((item, idx) => (
+          cleanList.map((item, idx) => (
             <div
               key={item.queueId}
               className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:border-white/15 transition-all"

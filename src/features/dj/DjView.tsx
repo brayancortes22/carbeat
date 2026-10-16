@@ -91,8 +91,8 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
           currentTime?: number;
           duration?: number;
         };
-        if (payload.catalog) setCatalog(payload.catalog);
-        if (payload.queue) setQueue(payload.queue);
+        if (payload.catalog) setCatalog(StorageService.deduplicateTracks(payload.catalog));
+        if (payload.queue) setQueue(StorageService.deduplicateQueue(payload.queue));
         if (payload.currentTrack !== undefined || payload.isPlaying !== undefined) {
           setLivePlayback((prev) => ({
             currentTrack: payload.currentTrack !== undefined ? payload.currentTrack : prev.currentTrack,
@@ -110,14 +110,29 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
         setIsSyncing(false);
       } else if (msg.type === 'QUEUE_TRACK') {
         const payload = msg.payload as { track: Track; requestedBy: string };
-        const newItem: QueueItem = {
-          queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          track: payload.track,
-          votes: 1,
-          requestedBy: payload.requestedBy,
-          requestedAt: Date.now(),
-        };
-        setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
+        setQueue((prev) => {
+          const existingIndex = prev.findIndex(
+            (item) =>
+              item.track.id === payload.track.id ||
+              item.track.title.toLowerCase().trim() === payload.track.title.toLowerCase().trim()
+          );
+          if (existingIndex >= 0) {
+            const updated = [...prev];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              votes: updated[existingIndex].votes + 1,
+            };
+            return StorageService.deduplicateQueue(updated);
+          }
+          const newItem: QueueItem = {
+            queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            track: payload.track,
+            votes: 1,
+            requestedBy: payload.requestedBy,
+            requestedAt: Date.now(),
+          };
+          return StorageService.deduplicateQueue([...prev, newItem]);
+        });
         setIsConnected(true);
       } else if (msg.type === 'VOTE_TRACK') {
         const payload = msg.payload as { queueId: string; delta: number };
@@ -130,16 +145,33 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
       }
     });
 
-    // Reintentar conexión cada 3 segundos si no hay respuesta (usa ref para evitar stale closure)
+    // Reintentar conexión cada 3 segundos si no hay respuesta
     const reconnectInterval = setInterval(() => {
       if (!isConnectedRef.current) {
         channel.send('ROOM_JOIN', djName, djName, { djName });
       }
     }, 3000);
 
+    // Enviar latido de DJ cada 3 segundos para mantener presencia en vivo en la pantalla del carro
+    const heartbeatInterval = setInterval(() => {
+      channel.send('DJ_HEARTBEAT' as any, djName, djName, { djName });
+      fetch('/api/room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'DJ_HEARTBEAT', payload: { djName } }),
+      }).catch(() => {});
+    }, 3000);
+
     return () => {
       unsub();
       clearInterval(reconnectInterval);
+      clearInterval(heartbeatInterval);
+      channel.send('ROOM_LEAVE' as any, djName, djName, { djName });
+      fetch('/api/room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'ROOM_LEAVE', payload: { djName } }),
+      }).catch(() => {});
     };
   }, [channel, djName]);
 
@@ -155,12 +187,19 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
 
   const handleQueueTrack = useCallback((track: Track) => {
     setQueue((prev) => {
-      const isDuplicate = prev.some(
+      const existingIndex = prev.findIndex(
         (item) =>
           item.track.id === track.id ||
           item.track.title.toLowerCase().trim() === track.title.toLowerCase().trim()
       );
-      if (isDuplicate) return prev;
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          votes: updated[existingIndex].votes + 1,
+        };
+        return StorageService.deduplicateQueue(updated);
+      }
 
       const newItem: QueueItem = {
         queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -169,7 +208,7 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
         requestedBy: djName,
         requestedAt: Date.now(),
       };
-      return [...prev, newItem].sort((a, b) => b.votes - a.votes);
+      return StorageService.deduplicateQueue([...prev, newItem]);
     });
 
     channel.send('QUEUE_TRACK', djName, djName, { track, requestedBy: djName });
@@ -181,17 +220,19 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
   }, [channel, djName]);
 
   const handleAddNewTrack = useCallback((track: Track) => {
-    setCatalog((prev) => (prev.some((t) => t.id === track.id) ? prev : [track, ...prev]));
-    const newItem: QueueItem = {
-      queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      track,
-      votes: 1,
-      requestedBy: djName,
-      requestedAt: Date.now(),
-    };
-    setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
-    channel.send('QUEUE_TRACK', djName, djName, { track, requestedBy: djName });
-  }, [channel, djName]);
+    setCatalog((prev) => StorageService.deduplicateTracks([track, ...prev]));
+    handleQueueTrack(track);
+  }, [handleQueueTrack]);
+
+  const handleLeave = () => {
+    channel.send('ROOM_LEAVE' as any, djName, djName, { djName });
+    fetch('/api/room', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'ROOM_LEAVE', payload: { djName } }),
+    }).catch(() => {});
+    onLeaveRoom();
+  };
 
   const progressPercent = livePlayback.duration > 0
     ? (livePlayback.currentTime / livePlayback.duration) * 100
@@ -208,7 +249,7 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
       {/* Header DJ */}
       <header className="flex items-center justify-between pb-3 border-b border-white/5">
         <button
-          onClick={onLeaveRoom}
+          onClick={handleLeave}
           className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" /> Salir
