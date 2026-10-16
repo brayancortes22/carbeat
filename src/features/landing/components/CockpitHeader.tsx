@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Radio, Wifi, BatteryCharging } from 'lucide-react';
+import { Radio, Wifi, BatteryCharging, Layers } from 'lucide-react';
 import { CARBEAT_VERSION } from '../../../core/version';
 import { VersionBadge } from '../../../components/ui/VersionBadge';
 
-export const CockpitHeader: React.FC = () => {
+interface CockpitHeaderProps {
+  onOpenSimulator?: () => void;
+}
+
+export const CockpitHeader: React.FC<CockpitHeaderProps> = ({ onOpenSimulator }) => {
   const [time, setTime] = useState<string>('');
 
   useEffect(() => {
@@ -28,6 +32,17 @@ export const CockpitHeader: React.FC = () => {
       </div>
 
       <div className="flex items-center gap-2.5">
+        {onOpenSimulator && (
+          <button
+            onClick={onOpenSimulator}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-bold transition-all active:scale-95 shadow-sm shadow-cyan-500/10 cursor-pointer"
+            title="Abrir Simulador Multi-Dispositivo (Tablet + iPhone + Galaxy)"
+          >
+            <Layers className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden md:inline">Simulador Multi-Dispositivo</span>
+            <span className="md:hidden">Simulador</span>
+          </button>
+        )}
         <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.03] border border-white/5 text-[11px] text-slate-300">
           <Radio className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
           <span>FM/WebRTC</span>

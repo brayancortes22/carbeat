@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { LandingView } from './features/landing/LandingView';
 import { HostView } from './features/host/HostView';
 import { DjView } from './features/dj/DjView';
+import { SimulatorStudioView } from './features/simulator/SimulatorStudioView';
 
-type AppMode = 'landing' | 'host' | 'dj';
+type AppMode = 'landing' | 'host' | 'dj' | 'simulator';
 
 const generateRoomId = (): string => {
   const prefixes = ['BEAT', 'CAR', 'RIDE', 'VIBE', 'AUTO'];
@@ -19,10 +20,32 @@ export const App: React.FC = () => {
   const [hostIp, setHostIp] = useState<string | undefined>(undefined);
   const [hostPort, setHostPort] = useState<number | undefined>(undefined);
 
-  // Si el usuario entra por un link con QR (?room=BEAT-XXX)
+  // Parsear parámetros de URL para simulación, QR y enlaces directos
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    const embedded = params.get('embedded');
     const roomParam = params.get('room');
+    const nameParam = params.get('djName');
+
+    if (viewParam === 'simulator') {
+      setMode('simulator');
+      return;
+    }
+
+    if (embedded === 'host') {
+      if (roomParam) setRoomId(roomParam.toUpperCase());
+      setMode('host');
+      return;
+    }
+
+    if (embedded === 'dj') {
+      if (roomParam) setRoomId(roomParam.toUpperCase());
+      if (nameParam) setDjName(nameParam);
+      setMode('dj');
+      return;
+    }
+
     if (roomParam) {
       setRoomId(roomParam.toUpperCase());
       setMode('dj');
@@ -47,17 +70,24 @@ export const App: React.FC = () => {
     setMode('landing');
     setHostIp(undefined);
     setHostPort(undefined);
-    // Limpiar query param si existía
     if (window.history.pushState) {
       const newUrl = window.location.pathname;
       window.history.pushState({ path: newUrl }, '', newUrl);
     }
   };
 
+  if (mode === 'simulator') {
+    return <SimulatorStudioView onExit={handleBackToLanding} />;
+  }
+
   return (
     <main className="min-h-screen bg-[#08090E] text-slate-100 flex flex-col justify-center">
       {mode === 'landing' && (
-        <LandingView onSelectHost={handleSelectHost} onJoinDj={handleJoinDj} />
+        <LandingView
+          onSelectHost={handleSelectHost}
+          onJoinDj={handleJoinDj}
+          onOpenSimulator={() => setMode('simulator')}
+        />
       )}
       {mode === 'host' && (
         <HostView onBackToLanding={handleBackToLanding} roomId={roomId} />
