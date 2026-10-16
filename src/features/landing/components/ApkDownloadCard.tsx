@@ -2,6 +2,7 @@ import React from 'react';
 import { Download, MonitorPlay, Smartphone, CheckCircle2 } from 'lucide-react';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Badge } from '../../../components/ui/Badge';
+import { CARBEAT_VERSION } from '../../../core/version';
 
 export const ApkDownloadCard: React.FC = () => {
   return (
@@ -10,7 +11,7 @@ export const ApkDownloadCard: React.FC = () => {
         <div className="space-y-2 text-center sm:text-left">
           <div className="flex items-center justify-center sm:justify-start gap-2">
             <Badge variant="cyan">APK Oficial</Badge>
-            <span className="text-xs text-slate-400">Versión 1.0.0 (Arm64 / Universal)</span>
+            <span className="text-xs text-slate-400">Versión {CARBEAT_VERSION} (Arm64 / Universal)</span>
           </div>
           <h3 className="text-xl font-bold text-white flex items-center justify-center sm:justify-start gap-2">
             <MonitorPlay className="w-5 h-5 text-cyan-400" />
@@ -33,7 +34,7 @@ export const ApkDownloadCard: React.FC = () => {
             className="flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold shadow-lg shadow-cyan-500/25 transition-all active:scale-95 text-sm"
           >
             <Download className="w-4 h-4" />
-            Descargar APK (4.1 MB)
+            Descargar APK (8.2 MB)
           </a>
           <span className="text-[10px] text-center text-slate-500 flex items-center justify-center gap-1">
             <Smartphone className="w-3 h-3" /> También funciona en tu teléfono
