@@ -157,9 +157,25 @@ export function useHostRoomChannel({
       }).catch(() => {});
     }, 3500);
 
+    const handleBeforeUnload = () => {
+      const payload = JSON.stringify({ type: 'CLOSE_ROOM', action: 'close', roomId });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/room', new Blob([payload], { type: 'application/json' }));
+      } else {
+        fetch('/api/room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
       unsub();
       clearInterval(hostHeartbeat);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [channel, roomId, enqueueTrack, broadcastSync, setQueue]);
 
@@ -172,7 +188,7 @@ export function useHostRoomChannel({
       await fetch('/api/room', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'close', roomId }),
+        body: JSON.stringify({ type: 'CLOSE_ROOM', action: 'close', roomId }),
       });
     } catch {
       // noop

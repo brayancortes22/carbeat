@@ -42,27 +42,51 @@ function websocketRoomsPlugin(): Plugin {
         const action = urlObj.searchParams.get('action') || '';
         const roomId = (urlObj.searchParams.get('roomId') || 'DEFAULT').toUpperCase();
 
+        const now = Date.now();
+        const INACTIVE_TIMEOUT_MS = 10000;
+
+        // Purgar periódicamente salas inactivas
+        for (const [id, r] of localRooms.entries()) {
+          if (now - (r.lastUpdated || 0) > INACTIVE_TIMEOUT_MS) {
+            localRooms.delete(id);
+          }
+        }
+
         if (req.method === 'GET') {
           if (action === 'discover') {
-            const list = Array.from(localRooms.values()).map((r) => ({
-              roomId: r.roomId,
-              roomName: r.roomName || `CarBeat ${r.roomId}`,
-              hostIp: '127.0.0.1',
-              djCount: Object.keys(r.djs || {}).length,
-              lastSeen: r.lastUpdated || Date.now()
-            }));
+            const list: any[] = [];
+            for (const r of localRooms.values()) {
+              if (now - (r.lastUpdated || 0) <= INACTIVE_TIMEOUT_MS) {
+                const activeDjs = Object.entries(r.djs || {}).filter(([_, time]: any) => now - time < 6000);
+                list.push({
+                  roomId: r.roomId,
+                  roomName: r.roomName || `CarBeat ${r.roomId}`,
+                  hostIp: '127.0.0.1',
+                  djCount: activeDjs.length,
+                  lastSeen: r.lastUpdated || now,
+                });
+              }
+            }
             res.end(JSON.stringify(list));
             return;
           }
-          const room = localRooms.get(roomId) || {
+
+          const existing = localRooms.get(roomId);
+          if (!existing || now - (existing.lastUpdated || 0) > INACTIVE_TIMEOUT_MS) {
+            if (existing) localRooms.delete(roomId);
+            res.end(JSON.stringify({
+              exists: false,
+              error: `La sala "${roomId}" no existe o el vehículo está desconectado.`,
+            }));
+            return;
+          }
+
+          const activeDjCount = Object.values(existing.djs || {}).filter((t: any) => now - t < 6000).length;
+          res.end(JSON.stringify({
             exists: true,
-            roomId,
-            queue: [],
-            currentTrack: null,
-            isPlaying: false,
-            lastUpdated: Date.now()
-          };
-          res.end(JSON.stringify(room));
+            ...existing,
+            djCount: activeDjCount,
+          }));
           return;
         }
 
@@ -73,6 +97,14 @@ function websocketRoomsPlugin(): Plugin {
             try {
               const data = JSON.parse(body || '{}');
               const targetId = (data.roomId || roomId).toUpperCase();
+
+              // Cierre de sala explícito
+              if (data.type === 'CLOSE_ROOM' || data.type === 'ROOM_CLOSED' || data.action === 'close') {
+                localRooms.delete(targetId);
+                res.end(JSON.stringify({ ok: true, closed: true }));
+                return;
+              }
+
               const existing = localRooms.get(targetId) || {
                 roomId: targetId,
                 queue: [],
