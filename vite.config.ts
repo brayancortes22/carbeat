@@ -24,6 +24,109 @@ function websocketRoomsPlugin(): Plugin {
         res.end(JSON.stringify({ ips: addresses, port: 5173 }));
       });
 
+      // Endpoint dev en memoria para /api/room (elimina 404s en desarrollo local)
+      const localRooms = new Map<string, any>();
+      server.middlewares.use('/api/room', async (req, res) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 200;
+          res.end();
+          return;
+        }
+
+        const urlObj = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+        const action = urlObj.searchParams.get('action') || '';
+        const roomId = (urlObj.searchParams.get('roomId') || 'DEFAULT').toUpperCase();
+
+        if (req.method === 'GET') {
+          if (action === 'discover') {
+            const list = Array.from(localRooms.values()).map((r) => ({
+              roomId: r.roomId,
+              roomName: r.roomName || `CarBeat ${r.roomId}`,
+              hostIp: '127.0.0.1',
+              djCount: Object.keys(r.djs || {}).length,
+              lastSeen: r.lastUpdated || Date.now()
+            }));
+            res.end(JSON.stringify(list));
+            return;
+          }
+          const room = localRooms.get(roomId) || {
+            exists: true,
+            roomId,
+            queue: [],
+            currentTrack: null,
+            isPlaying: false,
+            lastUpdated: Date.now()
+          };
+          res.end(JSON.stringify(room));
+          return;
+        }
+
+        if (req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk: any) => { body += chunk; });
+          req.on('end', () => {
+            try {
+              const data = JSON.parse(body || '{}');
+              const targetId = (data.roomId || roomId).toUpperCase();
+              const existing = localRooms.get(targetId) || {
+                roomId: targetId,
+                queue: [],
+                currentTrack: null,
+                isPlaying: false,
+                currentTime: 0,
+                duration: 0,
+                djs: {}
+              };
+
+              if (data.type === 'HOST_ANNOUNCE') {
+                existing.roomName = data.payload?.roomName || existing.roomName;
+                existing.lastUpdated = Date.now();
+              } else if (data.type === 'DJ_HEARTBEAT') {
+                existing.djs = existing.djs || {};
+                if (data.payload?.djName) existing.djs[data.payload.djName] = Date.now();
+              } else if (data.type === 'SYNC_CATALOG') {
+                if (data.payload?.queue) existing.queue = data.payload.queue;
+                if (data.payload?.catalog) existing.catalog = data.payload.catalog;
+                if (data.payload?.currentTrack !== undefined) existing.currentTrack = data.payload.currentTrack;
+                if (data.payload?.isPlaying !== undefined) existing.isPlaying = data.payload.isPlaying;
+                if (data.payload?.currentTime !== undefined) existing.currentTime = data.payload.currentTime;
+                if (data.payload?.duration !== undefined) existing.duration = data.payload.duration;
+                existing.lastUpdated = Date.now();
+              } else if (data.type === 'PLAYBACK_STATE') {
+                if (data.payload?.currentTrack !== undefined) existing.currentTrack = data.payload.currentTrack;
+                if (data.payload?.isPlaying !== undefined) existing.isPlaying = data.payload.isPlaying;
+                if (data.payload?.currentTime !== undefined) existing.currentTime = data.payload.currentTime;
+                if (data.payload?.duration !== undefined) existing.duration = data.payload.duration;
+                existing.lastUpdated = Date.now();
+              } else if (data.type === 'QUEUE_TRACK') {
+                existing.queue = existing.queue || [];
+                if (data.payload?.track) {
+                  existing.queue.push({
+                    queueId: `q_${Date.now()}`,
+                    track: data.payload.track,
+                    votes: 1,
+                    requestedBy: data.payload.requestedBy || 'DJ',
+                    requestedAt: Date.now()
+                  });
+                }
+                existing.lastUpdated = Date.now();
+              }
+
+              localRooms.set(targetId, existing);
+              res.end(JSON.stringify({ ok: true, room: existing }));
+            } catch {
+              res.end(JSON.stringify({ ok: true }));
+            }
+          });
+          return;
+        }
+      });
+
       // Endpoint proxy de YouTube Music Innertube (protocolo Metrolist / WEB_REMIX)
       server.middlewares.use('/api/yt/search', async (req, res) => {
         try {
@@ -109,20 +212,30 @@ function websocketRoomsPlugin(): Plugin {
         }
       });
 
-      // Servidor WebSocket para comunicación de salas (/ws-rooms)
-      const wss = new WebSocketServer({ noServer: true });
+      // Servidor WebSocket dedicado para comunicación de salas (/ws-rooms en puerto 5174)
+      let wss: WebSocketServer;
+      try {
+        wss = new WebSocketServer({ port: 5174 });
+        wss.on('error', (err: any) => {
+          console.warn('[Vite WS] Evento de socket:', err.message || err);
+        });
+        server.httpServer?.on('close', () => {
+          try { wss.close(); } catch { /* ignore */ }
+        });
+        console.log('[Vite WS] Servidor WebSocket dedicado escuchando en ws://localhost:5174');
+      } catch {
+        wss = new WebSocketServer({ noServer: true });
+      }
       const rooms = new Map<string, Set<WebSocket>>();
 
       server.httpServer?.on('upgrade', (req, socket, head) => {
         if (req.url?.startsWith('/ws-rooms')) {
-          console.log('[Vite WS] Upgrade /ws-rooms desde:', req.socket.remoteAddress);
           wss.handleUpgrade(req, socket, head, (ws) => {
             wss.emit('connection', ws, req);
           });
           return;
         }
         if (req.url?.startsWith('/ws-discovery')) {
-          console.log('[Vite WS] Upgrade /ws-discovery desde:', req.socket.remoteAddress);
           discoveryWss.handleUpgrade(req, socket, head, (ws) => {
             discoveryWss.emit('connection', ws, req);
           });
@@ -141,6 +254,30 @@ function websocketRoomsPlugin(): Plugin {
 
         console.log(`[Vite WS] Cliente conectado a sala: ${roomId} (total: ${rooms.get(roomId)!.size})`);
 
+        // Enviar sincronización inmediata si ya tenemos estado de esta sala en memoria
+        const cachedRoom = localRooms.get(roomId);
+        if (cachedRoom) {
+          try {
+            ws.send(JSON.stringify({
+              type: 'SYNC_CATALOG',
+              roomId,
+              senderId: 'server_fast_sync',
+              senderName: 'Vite Memory Relay',
+              timestamp: cachedRoom.lastUpdated || Date.now(),
+              payload: {
+                catalog: cachedRoom.catalog || [],
+                queue: cachedRoom.queue || [],
+                currentTrack: cachedRoom.currentTrack || null,
+                isPlaying: cachedRoom.isPlaying || false,
+                currentTime: cachedRoom.currentTime || 0,
+                duration: cachedRoom.duration || 0,
+              }
+            }));
+          } catch {
+            /* ignore */
+          }
+        }
+
         ws.on('message', (data) => {
           const roomClients = rooms.get(roomId);
           if (!roomClients) return;
@@ -148,6 +285,19 @@ function websocketRoomsPlugin(): Plugin {
           try {
             const msg = JSON.parse(data.toString());
             console.log(`[Vite WS] Mensaje en sala ${roomId}: ${msg.type} de ${msg.senderName}`);
+
+            // Actualizar caché en memoria
+            const existing = localRooms.get(roomId) || { roomId, queue: [], djs: {} };
+            if (msg.type === 'SYNC_CATALOG' || msg.type === 'PLAYBACK_STATE') {
+              if (msg.payload?.queue) existing.queue = msg.payload.queue;
+              if (msg.payload?.catalog) existing.catalog = msg.payload.catalog;
+              if (msg.payload?.currentTrack !== undefined) existing.currentTrack = msg.payload.currentTrack;
+              if (msg.payload?.isPlaying !== undefined) existing.isPlaying = msg.payload.isPlaying;
+              if (msg.payload?.currentTime !== undefined) existing.currentTime = msg.payload.currentTime;
+              if (msg.payload?.duration !== undefined) existing.duration = msg.payload.duration;
+              existing.lastUpdated = Date.now();
+              localRooms.set(roomId, existing);
+            }
 
             // Retransmitir a TODOS los clientes de la sala EXCEPTO al remitente
             for (const client of roomClients) {

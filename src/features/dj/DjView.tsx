@@ -81,13 +81,13 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
           <ArrowLeft className="w-4 h-4" /> Salir
         </button>
         <div className="flex items-center gap-2">
-          {isSyncing ? (
-            <Badge variant="amber" className="text-[10px]">
-              <RefreshCw className="w-3 h-3 animate-spin" /> Sincronizando...
-            </Badge>
-          ) : isConnected ? (
+          {isConnected ? (
             <Badge variant="emerald" className="text-[10px]">
               <Wifi className="w-3 h-3" /> Conectado
+            </Badge>
+          ) : isSyncing ? (
+            <Badge variant="amber" className="text-[10px]">
+              <RefreshCw className="w-3 h-3 animate-spin" /> Sincronizando...
             </Badge>
           ) : (
             <Badge variant="amber" className="text-[10px]">

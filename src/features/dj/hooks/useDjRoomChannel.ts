@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { RoomChannel } from '../../../core/network/room-channel';
+import { RoomChannel, getDefaultWsUrl } from '../../../core/network/room-channel';
 import { QueueItem, Track } from '../../../types/track.types';
 import { StorageService } from '../../../core/storage/storage-service';
 
@@ -48,7 +48,7 @@ export function useDjRoomChannel({
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       return `${proto}//${effectiveIp}:${hostPort}/ws-rooms`;
     }
-    return undefined;
+    return getDefaultWsUrl();
   }, [hostIp, hostPort]);
 
   const channel = useMemo(() => new RoomChannel(roomId, false, wsUrl), [roomId, wsUrl]);
@@ -61,13 +61,24 @@ export function useDjRoomChannel({
   }, [onRoomClosed]);
 
   useEffect(() => {
-    setIsSyncing(true);
-    setIsConnected(false);
+    if (channel.isConnected()) {
+      setIsConnected(true);
+      setIsSyncing(false);
+    } else {
+      setIsSyncing(true);
+      setIsConnected(false);
+    }
 
     channel.send('ROOM_JOIN', djName, djName, { djName });
 
     const unsub = channel.subscribe((msg) => {
-      if (msg.type === 'SYNC_CATALOG') {
+      if ((msg.type as any) === 'SOCKET_STATUS') {
+        const payload = msg.payload as { connected: boolean };
+        if (payload?.connected) {
+          setIsConnected(true);
+          setIsSyncing(false);
+        }
+      } else if (msg.type === 'SYNC_CATALOG') {
         const payload = msg.payload as {
           catalog?: Track[];
           queue?: QueueItem[];
@@ -96,6 +107,13 @@ export function useDjRoomChannel({
         triggerClose();
       }
     });
+
+    const statusCheckInterval = setInterval(() => {
+      if (channel.isConnected() && !isConnectedRef.current) {
+        setIsConnected(true);
+        setIsSyncing(false);
+      }
+    }, 500);
 
     const reconnectInterval = setInterval(() => {
       if (!isConnectedRef.current) {
@@ -131,11 +149,10 @@ export function useDjRoomChannel({
 
     return () => {
       unsub();
+      clearInterval(statusCheckInterval);
       clearInterval(reconnectInterval);
       clearInterval(heartbeatInterval);
       clearInterval(roomCheckInterval);
-      channel.send('ROOM_LEAVE' as any, djName, djName, { djName });
-      channel.close();
     };
   }, [channel, djName, roomId, setCatalog, setQueue, triggerClose]);
 
