@@ -80,7 +80,7 @@ export const LandingView: React.FC<LandingViewProps> = ({
   return (
     <div className="min-h-screen bg-[#07080D] flex flex-col justify-between selection:bg-cyan-500 selection:text-slate-950">
       <div>
-        <CockpitHeader onOpenSimulator={onOpenSimulator} />
+        <CockpitHeader />
         <HeroBanner />
         <UpdateNotificationBanner />
 
@@ -105,10 +105,19 @@ export const LandingView: React.FC<LandingViewProps> = ({
         </div>
       </div>
 
-      <footer className="text-center py-5 text-xs text-slate-500 border-t border-white/[0.06] flex items-center justify-center gap-2">
+      <footer className="text-center py-5 text-xs text-slate-500 border-t border-white/[0.06] flex items-center justify-center gap-2 flex-wrap">
         <ShieldCheck className="w-4 h-4 text-cyan-400" />
         <span>CarBeat Engine • Diseñado para cabinas vehiculares • Offline Ready</span>
         <VersionBadge version={CARBEAT_VERSION} />
+        {onOpenSimulator && (
+          <button
+            onClick={onOpenSimulator}
+            className="text-slate-600 hover:text-cyan-400 text-[10px] ml-2 cursor-pointer transition-colors"
+            title="Estudio de Simulación Multi-Dispositivo"
+          >
+            • Simulador
+          </button>
+        )}
       </footer>
 
       {/* Modal de Escaneo de Hosts Cercanos */}
