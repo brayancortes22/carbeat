@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { X, Search, Globe, Play, Plus, Disc, Loader2 } from 'lucide-react';
 import { Track } from '../../../types/track.types';
 import { MusicSearchService } from '../../../core/network/music-search-service';
+import { MusicSourceType } from '../../../core/providers/omni-music-gateway';
+import { TrackCover } from '../../../components/ui/TrackCover';
 
 interface HostWebSearchModalProps {
   isOpen: boolean;
@@ -17,17 +19,18 @@ export const HostWebSearchModal: React.FC<HostWebSearchModalProps> = ({
   onAddToQueue,
 }) => {
   const [query, setQuery] = useState('');
+  const [source, setSource] = useState<MusicSourceType>('all');
   const [results, setResults] = useState<Track[]>([]);
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async (e?: React.FormEvent, selectedSource = source) => {
+    if (e) e.preventDefault();
     if (!query.trim()) return;
 
     setLoading(true);
-    const searchTracks = await MusicSearchService.searchOnline(query, 'Pantalla del Carro');
+    const searchTracks = await MusicSearchService.searchOnline(query, 'Pantalla del Carro', selectedSource);
     setResults(searchTracks);
     setLoading(false);
   };
@@ -43,7 +46,7 @@ export const HostWebSearchModal: React.FC<HostWebSearchModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-white text-lg">Buscar Música en la Web</h3>
-              <p className="text-xs text-slate-400">Busca cualquier artista o canción y reprodúcela en el carro</p>
+              <p className="text-xs text-slate-400">YouTube Music, Apple/Spotify y streams online</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-lg">
@@ -51,15 +54,39 @@ export const HostWebSearchModal: React.FC<HostWebSearchModalProps> = ({
           </button>
         </div>
 
+        {/* Selector de Fuente OmniRoute */}
+        <div className="flex gap-2 my-2.5 text-xs">
+          {[
+            { id: 'all', label: '⚡ Todas (OmniRoute)' },
+            { id: 'youtube', label: '▶ YouTube Music' },
+            { id: 'apple', label: '🎵 Apple / Spotify' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                setSource(tab.id as MusicSourceType);
+                handleSearch(undefined, tab.id as MusicSourceType);
+              }}
+              className={`px-3 py-1.5 rounded-lg font-medium cursor-pointer transition-all ${
+                source === tab.id
+                  ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                  : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Barra de Búsqueda */}
-        <form onSubmit={handleSearch} className="flex gap-2 my-4">
+        <form onSubmit={(e) => handleSearch(e)} className="flex gap-2 mb-3">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ej: Vicente Fernández, Diomedes, Shakira, Queen, Salsa..."
+              placeholder="Ej: Vicente Fernández, Diomedes, Shakira, Queen, Feid..."
               className="w-full bg-slate-800/90 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400"
             />
           </div>
@@ -88,11 +115,7 @@ export const HostWebSearchModal: React.FC<HostWebSearchModalProps> = ({
               className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 transition-all"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <img
-                  src={track.coverUrl}
-                  alt={track.title}
-                  className="w-12 h-12 rounded-lg object-cover bg-slate-800 shrink-0"
-                />
+                <TrackCover src={track.coverUrl} alt={track.title} className="w-12 h-12 rounded-lg shrink-0" />
                 <div className="min-w-0">
                   <h4 className="text-sm font-bold text-white truncate">{track.title}</h4>
                   <p className="text-xs text-slate-400 truncate">{track.artist}</p>

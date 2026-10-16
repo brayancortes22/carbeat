@@ -3,22 +3,40 @@ import { HeroBanner } from './components/HeroBanner';
 import { ApkDownloadCard } from './components/ApkDownloadCard';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Badge } from '../../components/ui/Badge';
-import { MonitorPlay, Music2, QrCode, ArrowRight, ShieldCheck } from 'lucide-react';
+import { MonitorPlay, Music2, QrCode, ArrowRight, ShieldCheck, Radar } from 'lucide-react';
+import { HostScannerModal } from '../dj/components/HostScannerModal';
+import { CARBEAT_VERSION } from '../../core/version';
+import { VersionBadge } from '../../components/ui/VersionBadge';
 
 interface LandingViewProps {
   onSelectHost: () => void;
-  onJoinDj: (roomId: string, djName: string) => void;
+  onJoinDj: (roomId: string, djName: string, hostIp?: string, hostPort?: number) => void;
+}
+
+interface DiscoveredHost {
+  roomId: string;
+  roomName: string;
+  hostIp: string;
+  port: number;
+  djCount: number;
 }
 
 export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj }) => {
   const [roomIdInput, setRoomIdInput] = useState('BEAT-784');
   const [djNameInput, setDjNameInput] = useState('');
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   const handleJoinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomIdInput.trim()) return;
     const name = djNameInput.trim() || `DJ_${Math.floor(Math.random() * 900 + 100)}`;
-    onJoinDj(roomIdInput.trim().toUpperCase(), name);
+    onJoinDj(roomIdInput.trim().toUpperCase(), name, undefined, undefined);
+  };
+
+  const handleConnectDiscovered = (host: DiscoveredHost) => {
+    setIsScannerOpen(false);
+    const name = djNameInput.trim() || `DJ_${Math.floor(Math.random() * 900 + 100)}`;
+    onJoinDj(host.roomId, name, host.hostIp, host.port);
   };
 
   return (
@@ -95,6 +113,21 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj
                   <QrCode className="w-4 h-4" />
                   Conectarme a la Sala
                 </button>
+
+                <div className="relative my-3 flex items-center">
+                  <div className="flex-grow border-t border-white/10"></div>
+                  <span className="flex-shrink-0 mx-3 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">o escanea la red</span>
+                  <div className="flex-grow border-t border-t border-white/10"></div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsScannerOpen(true)}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold text-xs hover:bg-cyan-500/20 transition-all active:scale-95 cursor-pointer"
+                >
+                  <Radar className="w-4 h-4" />
+                  Escanear Carros Cercanos (Wi-Fi)
+                </button>
               </form>
             </div>
           </GlassCard>
@@ -107,7 +140,15 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj
       <footer className="text-center py-6 text-xs text-slate-600 border-t border-slate-800/40 flex items-center justify-center gap-2">
         <ShieldCheck className="w-4 h-4 text-cyan-500/50" />
         CarBeat Engine • Diseñado para cabinas vehiculares • Offline Ready
+        <VersionBadge version={CARBEAT_VERSION} />
       </footer>
+
+      {/* Modal de Escaneo de Hosts Cercanos */}
+      <HostScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onConnect={handleConnectDiscovered}
+      />
     </div>
   );
 };

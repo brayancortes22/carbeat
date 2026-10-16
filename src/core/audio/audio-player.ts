@@ -20,6 +20,10 @@ export class AudioEngine {
     this.audio.addEventListener('pause', () => this.notify());
     this.audio.addEventListener('ended', () => this.notify());
     this.audio.addEventListener('volumechange', () => this.notify());
+    this.audio.addEventListener('error', () => {
+      console.error('[AudioEngine] Error de carga de audio:', this.audio.error);
+      this.notify();
+    });
   }
 
   public subscribe(listener: PlayerListener): () => void {

@@ -10,7 +10,8 @@ export type RoomEventType =
   | 'VOTE_TRACK'
   | 'PLAYBACK_STATE'
   | 'HOST_COMMAND'
-  | 'NEW_TRACK_OFFER';
+  | 'NEW_TRACK_OFFER'
+  | 'HOST_ANNOUNCE';
 
 export interface RoomMessage<T = unknown> {
   type: RoomEventType;
