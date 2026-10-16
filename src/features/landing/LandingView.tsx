@@ -4,10 +4,12 @@ import { HeroBanner } from './components/HeroBanner';
 import { CockpitHostCard } from './components/CockpitHostCard';
 import { CockpitDjCard } from './components/CockpitDjCard';
 import { ApkDownloadCard } from './components/ApkDownloadCard';
+import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { HostScannerModal } from '../dj/components/HostScannerModal';
 import { CARBEAT_VERSION } from '../../core/version';
 import { VersionBadge } from '../../components/ui/VersionBadge';
 import { ShieldCheck } from 'lucide-react';
+import { apiUrl } from '../../core/network/api-config';
 
 interface LandingViewProps {
   onSelectHost: () => void;
@@ -42,7 +44,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj
     setRoomError(null);
 
     try {
-      const res = await fetch(`/api/room?roomId=${encodeURIComponent(code)}`);
+      const res = await fetch(apiUrl(`/api/room?roomId=${encodeURIComponent(code)}`));
       if (res.ok) {
         const data = await res.json();
         if (data && data.exists === false) {
@@ -75,6 +77,7 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj
       <div>
         <CockpitHeader />
         <HeroBanner />
+        <UpdateNotificationBanner />
 
         {/* Sección de Selección de Modo (Dual-Cockpit Cards) */}
         <main className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto px-4 my-6">

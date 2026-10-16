@@ -1,5 +1,6 @@
 import { RoomEventType, RoomMessage } from '../../types/room.types';
 import { PeerChannel } from './peer-channel';
+import { apiUrl, getApiBaseUrl } from './api-config';
 
 type MessageHandler = (msg: RoomMessage) => void;
 
@@ -7,6 +8,10 @@ const CLIENT_ID = `client_${Date.now()}_${Math.random().toString(36).substring(2
 
 export function getDefaultWsUrl(): string {
   if (typeof window === 'undefined') return '';
+  // Si estamos en la APK nativa (Capacitor), no hay WebSocket local en la tableta
+  if (getApiBaseUrl() !== '') {
+    return '';
+  }
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   if (window.location.port === '5173') {
     return `${proto}//${window.location.hostname}:5174/ws-rooms`;
@@ -80,7 +85,7 @@ export class RoomChannel {
     const poll = async () => {
       if (this.isClosed) return;
       try {
-        const res = await fetch(`/api/room?roomId=${encodeURIComponent(this.roomId)}`);
+        const res = await fetch(apiUrl(`/api/room?roomId=${encodeURIComponent(this.roomId)}`));
         if (res.ok) {
           this.isOnline = true;
           this.dispatch({
@@ -215,7 +220,7 @@ export class RoomChannel {
 
     // 3. Vercel Serverless Relay
     try {
-      fetch(`/api/room?roomId=${encodeURIComponent(this.roomId)}`, {
+      fetch(apiUrl(`/api/room?roomId=${encodeURIComponent(this.roomId)}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, payload }),
