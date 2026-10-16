@@ -2,6 +2,7 @@ import React from 'react';
 import { Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Disc } from 'lucide-react';
 import { Track } from '../../../types/track.types';
 import { Badge } from '../../../components/ui/Badge';
+import { AudioVisualizer } from './AudioVisualizer';
 
 interface NowPlayingScreenProps {
   track: Track | null;
@@ -65,6 +66,8 @@ export const NowPlayingScreen: React.FC<NowPlayingScreenProps> = ({
           <p className="text-sm font-medium text-slate-400 truncate">
             {track?.artist || 'Selecciona una canción'}
           </p>
+
+          <AudioVisualizer isPlaying={isPlaying} barCount={16} className="mt-2" />
         </div>
       </div>
 
