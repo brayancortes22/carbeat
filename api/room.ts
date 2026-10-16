@@ -28,10 +28,11 @@ export default async function handler(req: any, res: any) {
 
   const action = (req.query?.action as string) || '';
   const now = Date.now();
+  const INACTIVE_TIMEOUT_MS = 10000; // 10 segundos sin señal = sala inactiva
 
-  // Limpiar periódicamente salas inactivas (más de 60 segundos sin señal del host)
+  // Limpiar salas inactivas (>10 segundos sin señal del host)
   for (const [id, r] of roomsStore.entries()) {
-    if (now - r.hostLastSeen > 60000) {
+    if (now - r.hostLastSeen > INACTIVE_TIMEOUT_MS) {
       roomsStore.delete(id);
     }
   }
@@ -41,9 +42,9 @@ export default async function handler(req: any, res: any) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const activeRooms: any[] = [];
     for (const r of roomsStore.values()) {
-      if (now - r.hostLastSeen < 35000) {
-        // Purgar DJs inactivos (más de 8 segundos sin latido)
-        const activeDjs = Object.entries(r.djs).filter(([_, time]) => now - time < 8000);
+      if (now - r.hostLastSeen <= INACTIVE_TIMEOUT_MS) {
+        // Purgar DJs inactivos (más de 6 segundos sin latido)
+        const activeDjs = Object.entries(r.djs).filter(([_, time]) => now - time < 6000);
         activeRooms.push({
           roomId: r.roomId,
           roomName: r.roomName || `CarBeat ${r.roomId}`,
@@ -63,8 +64,9 @@ export default async function handler(req: any, res: any) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const existing = roomsStore.get(roomId);
 
-    // Si la sala no existe o su host lleva más de 35s desconectado
-    if (!existing || now - existing.hostLastSeen > 35000) {
+    // Si la sala no existe o su host lleva más de 10s desconectado
+    if (!existing || now - existing.hostLastSeen > INACTIVE_TIMEOUT_MS) {
+      if (existing) roomsStore.delete(roomId);
       return res.status(200).json({
         exists: false,
         error: `La sala "${roomId}" no existe o el vehículo está desconectado.`,
@@ -72,7 +74,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // Purgar DJs inactivos
-    const activeDjCount = Object.values(existing.djs).filter((t) => now - t < 8000).length;
+    const activeDjCount = Object.values(existing.djs).filter((t) => now - t < 6000).length;
 
     return res.status(200).json({
       exists: true,
@@ -107,7 +109,7 @@ export default async function handler(req: any, res: any) {
       const room = roomsStore.get(roomId)!;
 
       // A) Cierre de Sala por el Chofer (Detener y expulsar a todos)
-      if (type === 'CLOSE_ROOM' || type === 'ROOM_CLOSED') {
+      if (type === 'CLOSE_ROOM' || type === 'ROOM_CLOSED' || body.action === 'close' || payload?.action === 'close') {
         roomsStore.delete(roomId);
         return res.status(200).json({ ok: true, closed: true, message: 'Sala cerrada por el conductor' });
       }
