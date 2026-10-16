@@ -3,7 +3,6 @@ import { PeerChannel } from './peer-channel';
 
 type MessageHandler = (msg: RoomMessage) => void;
 
-// ID único para esta instancia de canal (evita auto-mensajes de BroadcastChannel)
 const CLIENT_ID = `client_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
 export function getDefaultWsUrl(): string {
@@ -13,10 +12,11 @@ export function getDefaultWsUrl(): string {
 }
 
 /**
- * Canal Híbrido Tri-Capa (OmniRoute Pattern):
- * Capa 1: WebSocket local (ultra baja latencia en red local/hotspot).
- * Capa 2: WebRTC P2P vía PeerJS (funciona en Vercel, redes móviles o sin backend).
- * Capa 3: BroadcastChannel (comunicación inter-pestañas en el mismo navegador).
+ * Canal Híbrido Multi-Capa con Fallback Serverless en Vercel:
+ * 1. WebSocket local (para red local/hotspot).
+ * 2. WebRTC P2P DataChannel (PeerJS).
+ * 3. HTTP Serverless Relay (/api/room en Vercel, 100% tolerante a firewalls).
+ * 4. BroadcastChannel local (inter-pestañas).
  */
 export class RoomChannel {
   private roomId: string;
@@ -24,16 +24,15 @@ export class RoomChannel {
   private peerChannel: PeerChannel | null = null;
   private broadcast: BroadcastChannel | null = null;
   private handlers: Set<MessageHandler> = new Set();
-  private pendingQueue: string[] = [];
   private seenMessages: Set<string> = new Set();
-  private isConnected = false;
   private isClosed = false;
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private httpPollInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(roomId: string, isHost = false, wsUrl: string = getDefaultWsUrl()) {
     this.roomId = roomId;
     this.initBroadcast();
     this.initPeerChannel(isHost);
+    this.initHttpRelay();
     if (wsUrl) {
       this.initWebSocket(wsUrl);
     }
@@ -69,42 +68,62 @@ export class RoomChannel {
     }
   }
 
+  private initHttpRelay(): void {
+    if (typeof window === 'undefined') return;
+
+    const poll = async () => {
+      if (this.isClosed) return;
+      try {
+        const res = await fetch(`/api/room?roomId=${encodeURIComponent(this.roomId)}`);
+        if (res.ok) {
+          const room = await res.json();
+          if (room && room.lastUpdated) {
+            this.handleIncoming({
+              type: 'SYNC_CATALOG',
+              roomId: this.roomId,
+              senderId: 'serverless_relay',
+              senderName: 'Vercel Relay',
+              timestamp: room.lastUpdated,
+              payload: {
+                catalog: room.queue ? room.queue.map((q: any) => q.track) : [],
+                queue: room.queue || [],
+                currentTrack: room.currentTrack,
+                isPlaying: room.isPlaying,
+                currentTime: room.currentTime,
+                duration: room.duration,
+              },
+            });
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    this.httpPollInterval = setInterval(poll, 1500);
+    setTimeout(poll, 200);
+  }
+
   private initWebSocket(url: string): void {
     try {
       this.ws = new WebSocket(`${url}?room=${encodeURIComponent(this.roomId)}`);
-
-      this.ws.onopen = () => {
-        this.isConnected = true;
-        console.log('[RoomChannel] WS conectado a la sala:', this.roomId);
-        while (this.pendingQueue.length > 0 && this.ws?.readyState === WebSocket.OPEN) {
-          const pending = this.pendingQueue.shift();
-          if (pending) this.ws.send(pending);
-        }
-      };
-
       this.ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as RoomMessage;
           this.handleIncoming(msg);
-        } catch (e) {
-          console.error('[RoomChannel] Error parseando JSON de WS:', e);
+        } catch {
+          /* ignore */
         }
       };
-
       this.ws.onclose = () => {
-        this.isConnected = false;
         if (!this.isClosed) {
-          this.reconnectTimeout = setTimeout(() => {
+          setTimeout(() => {
             if (!this.isClosed) this.initWebSocket(url);
-          }, 2000);
+          }, 3000);
         }
-      };
-
-      this.ws.onerror = () => {
-        this.isConnected = false;
       };
     } catch {
-      this.isConnected = false;
+      /* ignore */
     }
   }
 
@@ -134,20 +153,16 @@ export class RoomChannel {
       _clientId: CLIENT_ID,
     };
 
-    const rawString = JSON.stringify(msg);
-
-    // 1. Enviar por WebSocket si está conectado
+    // 1. WebSocket local
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
-        this.ws.send(rawString);
+        this.ws.send(JSON.stringify(msg));
       } catch {
-        this.pendingQueue.push(rawString);
+        /* ignore */
       }
-    } else {
-      this.pendingQueue.push(rawString);
     }
 
-    // 2. Enviar por canal P2P WebRTC
+    // 2. WebRTC P2P
     if (this.peerChannel) {
       try {
         this.peerChannel.send(msg);
@@ -156,7 +171,18 @@ export class RoomChannel {
       }
     }
 
-    // 3. Difundir por canal local BroadcastChannel
+    // 3. Vercel Serverless Relay
+    try {
+      fetch(`/api/room?roomId=${encodeURIComponent(this.roomId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, payload }),
+      }).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+
+    // 4. BroadcastChannel
     try {
       this.broadcast?.postMessage(msg);
     } catch {
@@ -173,17 +199,17 @@ export class RoomChannel {
     this.handlers.forEach((h) => {
       try {
         h(msg);
-      } catch (err) {
-        console.error('[RoomChannel] Error en handler:', err);
+      } catch {
+        /* ignore */
       }
     });
   }
 
   public close(): void {
     this.isClosed = true;
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
+    if (this.httpPollInterval) {
+      clearInterval(this.httpPollInterval);
+      this.httpPollInterval = null;
     }
     if (this.ws) {
       try { this.ws.close(); } catch { /* ignore */ }
@@ -199,10 +225,5 @@ export class RoomChannel {
     }
     this.handlers.clear();
     this.seenMessages.clear();
-    this.pendingQueue = [];
-  }
-
-  public getStatus(): boolean {
-    return this.isConnected;
   }
 }
