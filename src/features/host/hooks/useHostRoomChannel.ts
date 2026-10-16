@@ -3,6 +3,7 @@ import { RoomChannel } from '../../../core/network/room-channel';
 import { QueueItem, Track } from '../../../types/track.types';
 import { StorageService } from '../../../core/storage/storage-service';
 import { globalAudioEngine } from '../../../core/audio/audio-player';
+import { apiUrl } from '../../../core/network/api-config';
 
 interface UseHostRoomChannelProps {
   roomId: string;
@@ -147,7 +148,7 @@ export function useHostRoomChannel({
 
     // Enviar latido HTTP del Host a la nube cada 3.5 segundos para que la sala nunca expire
     const hostHeartbeat = setInterval(() => {
-      fetch('/api/room', {
+      fetch(apiUrl('/api/room'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -159,10 +160,11 @@ export function useHostRoomChannel({
 
     const handleBeforeUnload = () => {
       const payload = JSON.stringify({ type: 'CLOSE_ROOM', action: 'close', roomId });
+      const targetUrl = apiUrl('/api/room');
       if (navigator.sendBeacon) {
-        navigator.sendBeacon('/api/room', new Blob([payload], { type: 'application/json' }));
+        navigator.sendBeacon(targetUrl, new Blob([payload], { type: 'application/json' }));
       } else {
-        fetch('/api/room', {
+        fetch(targetUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: payload,
@@ -185,7 +187,7 @@ export function useHostRoomChannel({
       reason: 'El chofer ha cerrado la sala',
     });
     try {
-      await fetch('/api/room', {
+      await fetch(apiUrl('/api/room'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'CLOSE_ROOM', action: 'close', roomId }),

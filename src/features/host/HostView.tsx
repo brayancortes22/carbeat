@@ -11,6 +11,8 @@ import { globalAudioEngine } from '../../core/audio/audio-player';
 import { MOCK_CAR_TRACKS } from '../../core/audio/mock-library';
 import { Track } from '../../types/track.types';
 import { LocalScanner } from '../../core/audio/local-scanner';
+import { LocalAudioDatabase } from '../../core/audio/local-audio-db';
+import { apiUrl } from '../../core/network/api-config';
 import { startHostAnnouncer, stopHostAnnouncer } from '../../core/network/host-discovery';
 import { StorageService } from '../../core/storage/storage-service';
 import { useHostRoomChannel } from './hooks/useHostRoomChannel';
@@ -41,11 +43,26 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
 
   const queueRef = useRef(queue);
   const catalogRef = useRef(catalog);
+  const historyRef = useRef<Track[]>([]);
   queueRef.current = queue;
   catalogRef.current = catalog;
 
+  // Cargar automáticamente música local persistente de IndexedDB al arrancar
+  useEffect(() => {
+    LocalAudioDatabase.loadAllTracks().then((localTracks) => {
+      if (localTracks.length > 0) {
+        setCatalog((prev) => StorageService.deduplicateTracks([...localTracks, ...prev]));
+      }
+    });
+  }, []);
+
   // Manejar el avance a la siguiente canción
   const handleNext = useCallback(() => {
+    const current = globalAudioEngine.getState().currentTrack;
+    if (current) {
+      historyRef.current.push(current);
+      if (historyRef.current.length > 50) historyRef.current.shift();
+    }
     const currentQueue = queueRef.current;
     const currentCatalog = catalogRef.current;
     if (currentQueue.length > 0) {
@@ -55,6 +72,21 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     } else if (currentCatalog.length > 0) {
       const randomIdx = Math.floor(Math.random() * currentCatalog.length);
       globalAudioEngine.loadTrack(currentCatalog[randomIdx], true);
+    }
+  }, []);
+
+  // Manejar retroceso a la canción anterior con historial real
+  const handlePrev = useCallback(() => {
+    const currentState = globalAudioEngine.getState();
+    if (currentState.currentTime > 3) {
+      globalAudioEngine.seek(0);
+      return;
+    }
+    if (historyRef.current.length > 0) {
+      const prevTrack = historyRef.current.pop()!;
+      globalAudioEngine.loadTrack(prevTrack, true);
+    } else {
+      globalAudioEngine.seek(0);
     }
   }, []);
 
@@ -91,7 +123,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
 
   // IP LAN y Anuncio en Red local
   useEffect(() => {
-    fetch('/api/server-info')
+    fetch(apiUrl('/api/server-info'))
       .then((res) => res.json())
       .then((data) => {
         if (data.ips?.[0]) setHostLanIp(data.ips[0]);
@@ -121,6 +153,10 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   });
 
   const handlePlayNow = (track: Track) => {
+    const current = globalAudioEngine.getState().currentTrack;
+    if (current && current.id !== track.id) {
+      historyRef.current.push(current);
+    }
     const newCatalog = StorageService.deduplicateTracks([track, ...catalogRef.current]);
     setCatalog(newCatalog);
     globalAudioEngine.loadTrack(track, true);
@@ -180,7 +216,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
               volume={playerState.volume}
               onTogglePlay={() => globalAudioEngine.toggle()}
               onNext={handleNext}
-              onPrev={() => globalAudioEngine.seek(0)}
+              onPrev={handlePrev}
               onSeek={(s) => globalAudioEngine.seek(s)}
               onVolumeChange={(v) => globalAudioEngine.setVolume(v)}
             />
