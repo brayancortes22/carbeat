@@ -8,6 +8,9 @@ const CLIENT_ID = `client_${Date.now()}_${Math.random().toString(36).substring(2
 export function getDefaultWsUrl(): string {
   if (typeof window === 'undefined') return '';
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  if (window.location.port === '5173') {
+    return `${proto}//${window.location.hostname}:5174/ws-rooms`;
+  }
   return `${proto}//${window.location.host}/ws-rooms`;
 }
 
@@ -27,6 +30,7 @@ export class RoomChannel {
   private seenMessages: Set<string> = new Set();
   private isClosed = false;
   private httpPollInterval: ReturnType<typeof setInterval> | null = null;
+  private pendingWsMessages: string[] = [];
 
   constructor(roomId: string, isHost = false, wsUrl: string = getDefaultWsUrl()) {
     this.roomId = roomId;
@@ -68,6 +72,8 @@ export class RoomChannel {
     }
   }
 
+  private isOnline = false;
+
   private initHttpRelay(): void {
     if (typeof window === 'undefined') return;
 
@@ -76,6 +82,15 @@ export class RoomChannel {
       try {
         const res = await fetch(`/api/room?roomId=${encodeURIComponent(this.roomId)}`);
         if (res.ok) {
+          this.isOnline = true;
+          this.dispatch({
+            type: 'SOCKET_STATUS' as any,
+            roomId: this.roomId,
+            senderId: 'http_relay',
+            senderName: 'Vercel Relay',
+            timestamp: Date.now(),
+            payload: { connected: true }
+          });
           const room = await res.json();
           if (room && room.lastUpdated) {
             this.handleIncoming({
@@ -101,12 +116,34 @@ export class RoomChannel {
     };
 
     this.httpPollInterval = setInterval(poll, 1500);
-    setTimeout(poll, 200);
+    setTimeout(poll, 100);
   }
 
   private initWebSocket(url: string): void {
     try {
       this.ws = new WebSocket(`${url}?room=${encodeURIComponent(this.roomId)}`);
+      this.ws.onopen = () => {
+        this.isOnline = true;
+        while (this.pendingWsMessages.length > 0) {
+          const raw = this.pendingWsMessages.shift();
+          if (raw && this.ws && this.ws.readyState === 1) {
+            try {
+              this.ws.send(raw);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        // Notificar al estado local que el socket está en línea inmediatamente
+        this.dispatch({
+          type: 'SOCKET_STATUS' as any,
+          roomId: this.roomId,
+          senderId: 'ws_connected',
+          senderName: 'WebSocket Local',
+          timestamp: Date.now(),
+          payload: { connected: true }
+        });
+      };
       this.ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as RoomMessage;
@@ -154,11 +191,16 @@ export class RoomChannel {
     };
 
     // 1. WebSocket local
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        this.ws.send(JSON.stringify(msg));
-      } catch {
-        /* ignore */
+    const rawMsg = JSON.stringify(msg);
+    if (this.ws) {
+      if (this.ws.readyState === 1) {
+        try {
+          this.ws.send(rawMsg);
+        } catch {
+          /* ignore */
+        }
+      } else if (this.ws.readyState === 0) {
+        this.pendingWsMessages.push(rawMsg);
       }
     }
 
@@ -188,6 +230,10 @@ export class RoomChannel {
     } catch {
       /* ignore */
     }
+  }
+
+  public isConnected(): boolean {
+    return (this.ws && this.ws.readyState === 1) || this.isOnline;
   }
 
   public subscribe(handler: MessageHandler): () => void {
