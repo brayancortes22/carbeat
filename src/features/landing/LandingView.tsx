@@ -3,7 +3,7 @@ import { HeroBanner } from './components/HeroBanner';
 import { ApkDownloadCard } from './components/ApkDownloadCard';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Badge } from '../../components/ui/Badge';
-import { MonitorPlay, Music2, QrCode, ArrowRight, ShieldCheck, Radar } from 'lucide-react';
+import { MonitorPlay, Music2, QrCode, ArrowRight, ShieldCheck, Radar, AlertCircle, Loader2 } from 'lucide-react';
 import { HostScannerModal } from '../dj/components/HostScannerModal';
 import { CARBEAT_VERSION } from '../../core/version';
 import { VersionBadge } from '../../components/ui/VersionBadge';
@@ -25,16 +25,40 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj
   const [roomIdInput, setRoomIdInput] = useState('BEAT-784');
   const [djNameInput, setDjNameInput] = useState('');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isCheckingRoom, setIsCheckingRoom] = useState(false);
+  const [roomError, setRoomError] = useState<string | null>(null);
 
-  const handleJoinSubmit = (e: React.FormEvent) => {
+  const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!roomIdInput.trim()) return;
+    const code = roomIdInput.trim().toUpperCase();
+    if (!code) return;
+
+    setIsCheckingRoom(true);
+    setRoomError(null);
+
+    try {
+      const res = await fetch(`/api/room?roomId=${encodeURIComponent(code)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.exists === false) {
+          setRoomError(data.error || `No se encontró la sala "${code}". Verifica el código en la pantalla del carro.`);
+          setIsCheckingRoom(false);
+          return;
+        }
+      }
+    } catch {
+      // Ignorar error de red si no hay internet (permite fallback offline si aplica)
+    } finally {
+      setIsCheckingRoom(false);
+    }
+
     const name = djNameInput.trim() || `DJ_${Math.floor(Math.random() * 900 + 100)}`;
-    onJoinDj(roomIdInput.trim().toUpperCase(), name, undefined, undefined);
+    onJoinDj(code, name, undefined, undefined);
   };
 
   const handleConnectDiscovered = (host: DiscoveredHost) => {
     setIsScannerOpen(false);
+    setRoomError(null);
     const name = djNameInput.trim() || `DJ_${Math.floor(Math.random() * 900 + 100)}`;
     onJoinDj(host.roomId, name, host.hostIp, host.port);
   };
@@ -106,12 +130,29 @@ export const LandingView: React.FC<LandingViewProps> = ({ onSelectHost, onJoinDj
                     className="w-full bg-slate-900/60 border border-slate-700/60 rounded-xl px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-purple-500/80 transition-colors"
                   />
                 </div>
+                {roomError && (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-start gap-2.5 animate-bounce">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+                    <span>{roomError}</span>
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold transition-all shadow-lg shadow-purple-500/20 active:scale-95 cursor-pointer"
+                  disabled={isCheckingRoom}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold transition-all shadow-lg shadow-purple-500/20 active:scale-95 cursor-pointer disabled:opacity-60"
                 >
-                  <QrCode className="w-4 h-4" />
-                  Conectarme a la Sala
+                  {isCheckingRoom ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Verificando Sala en Vivo...
+                    </>
+                  ) : (
+                    <>
+                      <QrCode className="w-4 h-4" />
+                      Conectarme a la Sala
+                    </>
+                  )}
                 </button>
 
                 <div className="relative my-3 flex items-center">

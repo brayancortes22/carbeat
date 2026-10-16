@@ -15,6 +15,8 @@ const discoveredHosts = new Map<string, DiscoveredHost>();
 let scanCallback: ((hosts: DiscoveredHost[]) => void) | null = null;
 let cleanupInterval: ReturnType<typeof setInterval> | null = null;
 let wsAnnounceInterval: ReturnType<typeof setInterval> | null = null;
+let httpAnnounceInterval: ReturnType<typeof setInterval> | null = null;
+let scanHttpInterval: ReturnType<typeof setInterval> | null = null;
 let announceWs: WebSocket | null = null;
 let scanWs: WebSocket | null = null;
 let currentDjCount = 0;
@@ -69,9 +71,27 @@ export function startHostAnnouncer(
         // Error enviando
       }
     }
+
+    // Anunciar por HTTP a Vercel Serverless (100% compatible con nube y celulares)
+    try {
+      fetch('/api/room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'HOST_ANNOUNCE',
+          payload: { roomId, roomName, hostIp, djCount: currentDjCount },
+        }),
+      }).catch(() => {});
+    } catch {
+      // Ignorar
+    }
   };
 
-  // Configurar conexión WebSocket para anuncios
+  // Enviar primer anuncio HTTP inmediato y periódico cada 2.5 segundos
+  announce();
+  httpAnnounceInterval = setInterval(announce, 2500);
+
+  // Configurar conexión WebSocket para anuncios locales
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const discoveryUrl = `${proto}//${window.location.host}/ws-discovery`;
 
@@ -107,7 +127,7 @@ export function startHostAnnouncer(
     const now = Date.now();
     let changed = false;
     for (const [key, host] of discoveredHosts.entries()) {
-      if (now - host.lastSeen > 5000) {
+      if (now - host.lastSeen > 8000) {
         discoveredHosts.delete(key);
         changed = true;
       }
@@ -117,6 +137,10 @@ export function startHostAnnouncer(
 }
 
 export function stopHostAnnouncer(): void {
+  if (httpAnnounceInterval) {
+    clearInterval(httpAnnounceInterval);
+    httpAnnounceInterval = null;
+  }
   if (wsAnnounceInterval) {
     clearInterval(wsAnnounceInterval);
     wsAnnounceInterval = null;
@@ -134,7 +158,7 @@ export function stopHostAnnouncer(): void {
 }
 
 /**
- * Los DJs escuchan anuncios de hosts cercanos.
+ * Los DJs escuchan anuncios de hosts cercanos vía HTTP Serverless y WebSocket/BroadcastChannel.
  */
 export function startHostScanner(
   callback: (hosts: DiscoveredHost[]) => void
@@ -142,6 +166,36 @@ export function startHostScanner(
   stopHostScanner();
   scanCallback = callback;
 
+  // 1. Consulta periódica vía HTTP Serverless (100% compatible con Vercel)
+  const fetchHttpRooms = async () => {
+    try {
+      const res = await fetch('/api/room?action=discover');
+      if (res.ok) {
+        const rooms = (await res.json()) as any[];
+        if (Array.isArray(rooms)) {
+          rooms.forEach((r) => {
+            const host: DiscoveredHost = {
+              roomId: r.roomId,
+              roomName: r.roomName || `CarBeat ${r.roomId}`,
+              hostIp: r.hostIp || 'Nube Vercel',
+              port: 443,
+              lastSeen: r.lastSeen || Date.now(),
+              djCount: r.djCount || 0,
+            };
+            discoveredHosts.set(host.roomId, host);
+          });
+          notifyScanCallback();
+        }
+      }
+    } catch {
+      // Ignorar errores transitorios de red
+    }
+  };
+
+  fetchHttpRooms();
+  scanHttpInterval = setInterval(fetchHttpRooms, 1500);
+
+  // 2. Conexión WebSocket para desarrollo local / red hotspot
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const discoveryUrl = `${proto}//${window.location.host}/ws-discovery`;
 
@@ -190,7 +244,7 @@ export function startHostScanner(
     }
   };
 
-  // También escuchar por BroadcastChannel (pestañas hermanas)
+  // 3. Escuchar también por BroadcastChannel (pestañas hermanas en la misma máquina)
   try {
     const bc = new BroadcastChannel(DISCOVERY_CHANNEL);
     bc.onmessage = (event) => {
@@ -228,6 +282,10 @@ export function startHostScanner(
 export function stopHostScanner(): void {
   scanCallback = null;
   discoveredHosts.clear();
+  if (scanHttpInterval) {
+    clearInterval(scanHttpInterval);
+    scanHttpInterval = null;
+  }
   if (scanWs) {
     try { scanWs.close(); } catch { /* ignore */ }
     scanWs = null;
