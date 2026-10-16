@@ -9,6 +9,8 @@ export const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>('landing');
   const [roomId, setRoomId] = useState('BEAT-784');
   const [djName, setDjName] = useState('DJ_Copiloto');
+  const [hostIp, setHostIp] = useState<string | undefined>(undefined);
+  const [hostPort, setHostPort] = useState<number | undefined>(undefined);
 
   // Si el usuario entra por un link con QR (?room=BEAT-XXX)
   useEffect(() => {
@@ -24,14 +26,18 @@ export const App: React.FC = () => {
     setMode('host');
   };
 
-  const handleJoinDj = (selectedRoom: string, name: string) => {
+  const handleJoinDj = (selectedRoom: string, name: string, ip?: string, port?: number) => {
     setRoomId(selectedRoom);
     setDjName(name);
+    setHostIp(ip);
+    setHostPort(port);
     setMode('dj');
   };
 
   const handleBackToLanding = () => {
     setMode('landing');
+    setHostIp(undefined);
+    setHostPort(undefined);
     // Limpiar query param si existía
     if (window.history.pushState) {
       const newUrl = window.location.pathname;
@@ -48,7 +54,13 @@ export const App: React.FC = () => {
         <HostView onBackToLanding={handleBackToLanding} roomId={roomId} />
       )}
       {mode === 'dj' && (
-        <DjView roomId={roomId} djName={djName} onLeaveRoom={handleBackToLanding} />
+        <DjView
+          roomId={roomId}
+          djName={djName}
+          hostIp={hostIp}
+          hostPort={hostPort}
+          onLeaveRoom={handleBackToLanding}
+        />
       )}
     </main>
   );

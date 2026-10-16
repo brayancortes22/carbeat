@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { CatalogBrowser } from './components/CatalogBrowser';
 import { QueueVoteList } from './components/QueueVoteList';
 import { NewTrackModal } from './components/NewTrackModal';
@@ -8,11 +8,17 @@ import { TrackCover } from '../../components/ui/TrackCover';
 import { RoomChannel } from '../../core/network/room-channel';
 import { MOCK_CAR_TRACKS } from '../../core/audio/mock-library';
 import { QueueItem, Track } from '../../types/track.types';
-import { ArrowLeft, Sparkles, Radio, Check, Volume2, Music } from 'lucide-react';
+import { MusicSearchService } from '../../core/network/music-search-service';
+import { StorageService } from '../../core/storage/storage-service';
+import { CARBEAT_VERSION } from '../../core/version';
+import { VersionBadge } from '../../components/ui/VersionBadge';
+import { ArrowLeft, Sparkles, Radio, Check, Volume2, Music, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 
 interface DjViewProps {
   roomId: string;
   djName: string;
+  hostIp?: string; // IP del host del carro para conectar por red
+  hostPort?: number; // Puerto del host del carro
   onLeaveRoom: () => void;
 }
 
@@ -23,47 +29,82 @@ interface LivePlaybackState {
   duration: number;
 }
 
-export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) => {
-  const [catalog, setCatalog] = useState<Track[]>(MOCK_CAR_TRACKS);
-  const [queue, setQueue] = useState<QueueItem[]>([]);
+export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort, onLeaveRoom }) => {
+  const [catalog, setCatalog] = useState<Track[]>(() => StorageService.loadCatalog(MOCK_CAR_TRACKS));
+  const [queue, setQueue] = useState<QueueItem[]>(() => StorageService.loadQueue());
   const [activeView, setActiveView] = useState<'catalog' | 'queue'>('catalog');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(true);
   const [livePlayback, setLivePlayback] = useState<LivePlaybackState>({
-    currentTrack: MOCK_CAR_TRACKS[0], // Mostrar canción activa inicial
+    currentTrack: null,
     isPlaying: false,
     currentTime: 0,
-    duration: 355,
+    duration: 0,
   });
 
-  const channel = useMemo(() => new RoomChannel(roomId), [roomId]);
+  // Construir URL del WebSocket: si hay hostIp, conectar al carro remoto; si no, usar localhost
+  const wsUrl = useMemo(() => {
+    if (hostIp && hostPort) {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${proto}//${hostIp}:${hostPort}/ws-rooms`;
+    }
+    return undefined;
+  }, [hostIp, hostPort]);
+
+  const channel = useMemo(() => new RoomChannel(roomId, wsUrl), [roomId, wsUrl]);
+
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
 
   const showToast = (text: string) => {
     setToastMessage(text);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  // Cerrar canal al desmontar
   useEffect(() => {
     return () => {
       channel.close();
     };
   }, [channel]);
 
+  // Suscribirse a mensajes del Host
   useEffect(() => {
+    setIsSyncing(true);
+    setIsConnected(false);
+
     // Anunciar entrada a la sala al Host
     channel.send('ROOM_JOIN', djName, djName, { djName });
 
     const unsub = channel.subscribe((msg) => {
       if (msg.type === 'SYNC_CATALOG') {
-        const payload = msg.payload as { catalog?: Track[]; queue?: QueueItem[]; currentTrack?: Track | null };
+        const payload = msg.payload as {
+          catalog?: Track[];
+          queue?: QueueItem[];
+          currentTrack?: Track | null;
+          isPlaying?: boolean;
+          currentTime?: number;
+          duration?: number;
+        };
         if (payload.catalog) setCatalog(payload.catalog);
         if (payload.queue) setQueue(payload.queue);
-        if (payload.currentTrack !== undefined) {
-          setLivePlayback((prev) => ({ ...prev, currentTrack: payload.currentTrack || null }));
+        if (payload.currentTrack !== undefined || payload.isPlaying !== undefined) {
+          setLivePlayback((prev) => ({
+            currentTrack: payload.currentTrack !== undefined ? payload.currentTrack : prev.currentTrack,
+            isPlaying: payload.isPlaying !== undefined ? payload.isPlaying : prev.isPlaying,
+            currentTime: payload.currentTime !== undefined ? payload.currentTime : prev.currentTime,
+            duration: payload.duration !== undefined ? payload.duration : prev.duration,
+          }));
         }
+        setIsConnected(true);
+        setIsSyncing(false);
       } else if (msg.type === 'PLAYBACK_STATE') {
         const payload = msg.payload as LivePlaybackState;
         setLivePlayback(payload);
+        setIsConnected(true);
+        setIsSyncing(false);
       } else if (msg.type === 'QUEUE_TRACK') {
         const payload = msg.payload as { track: Track; requestedBy: string };
         const newItem: QueueItem = {
@@ -74,6 +115,7 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
           requestedAt: Date.now(),
         };
         setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
+        setIsConnected(true);
       } else if (msg.type === 'VOTE_TRACK') {
         const payload = msg.payload as { queueId: string; delta: number };
         setQueue((prev) =>
@@ -81,15 +123,34 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
             .map((item) => (item.queueId === payload.queueId ? { ...item, votes: Math.max(0, item.votes + payload.delta) } : item))
             .sort((a, b) => b.votes - a.votes)
         );
+        setIsConnected(true);
       }
     });
 
+    // Reintentar conexión cada 3 segundos si no hay respuesta (usa ref para evitar stale closure)
+    const reconnectInterval = setInterval(() => {
+      if (!isConnectedRef.current) {
+        channel.send('ROOM_JOIN', djName, djName, { djName });
+      }
+    }, 3000);
+
     return () => {
       unsub();
+      clearInterval(reconnectInterval);
     };
   }, [channel, djName]);
 
-  const handleQueueTrack = (track: Track) => {
+  // Persistir catálogo ante cambios recibidos
+  useEffect(() => {
+    StorageService.saveCatalog(catalog);
+  }, [catalog]);
+
+  // Persistir cola ante cambios recibidos
+  useEffect(() => {
+    StorageService.saveQueue(queue);
+  }, [queue]);
+
+  const handleQueueTrack = useCallback((track: Track) => {
     const newItem: QueueItem = {
       queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       track,
@@ -99,15 +160,15 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
     };
     setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
     channel.send('QUEUE_TRACK', djName, djName, { track, requestedBy: djName });
-    showToast(`"${track.title}" agregada a la cola del carro`);
-  };
+    showToast(`"${track.title}" enviada al carro`);
+  }, [channel, djName]);
 
-  const handleVote = (queueId: string, delta: number) => {
+  const handleVote = useCallback((queueId: string, delta: number) => {
     channel.send('VOTE_TRACK', djName, djName, { queueId, delta });
-  };
+  }, [channel, djName]);
 
-  const handleAddNewTrack = (track: Track) => {
-    setCatalog((prev) => [track, ...prev]);
+  const handleAddNewTrack = useCallback((track: Track) => {
+    setCatalog((prev) => (prev.some((t) => t.id === track.id) ? prev : [track, ...prev]));
     const newItem: QueueItem = {
       queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       track,
@@ -116,14 +177,42 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
       requestedAt: Date.now(),
     };
     setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
-    channel.send('NEW_TRACK_OFFER', djName, djName, { track });
     channel.send('QUEUE_TRACK', djName, djName, { track, requestedBy: djName });
     showToast(`"${track.title}" enviada al carro y puesta en cola`);
-  };
+  }, [channel, djName]);
+
+  // Buscar en la web cuando no se encuentra localmente
+  const handleSearchWeb = useCallback(async (query: string) => {
+    if (!navigator.onLine) {
+      showToast('Sin conexión a internet');
+      return;
+    }
+    try {
+      const results = await MusicSearchService.searchOnline(query, djName);
+      if (results.length > 0) {
+        setCatalog((prev) => {
+          const existingIds = new Set(prev.map((t) => t.id));
+          const newTracks = results.filter((t) => !existingIds.has(t.id));
+          return [...newTracks, ...prev];
+        });
+        showToast(`${results.length} canciones encontradas en la web`);
+      } else {
+        showToast('No se encontraron resultados en la web');
+      }
+    } catch {
+      showToast('Error buscando en la web');
+    }
+  }, [djName]);
 
   const progressPercent = livePlayback.duration > 0
     ? (livePlayback.currentTime / livePlayback.duration) * 100
     : 0;
+
+  const formatTime = (secs: number) => {
+    const mins = Math.floor(secs / 60);
+    const remaining = Math.floor(secs % 60);
+    return `${mins}:${remaining < 10 ? '0' : ''}${remaining}`;
+  };
 
   return (
     <div className="min-h-screen bg-[#08090E] p-3 sm:p-5 flex flex-col justify-between max-w-xl mx-auto pb-4">
@@ -136,9 +225,24 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
           <ArrowLeft className="w-4 h-4" /> Salir
         </button>
         <div className="flex items-center gap-2">
+          {/* Indicador de conexión */}
+          {isSyncing ? (
+            <Badge variant="amber" className="text-[10px]">
+              <RefreshCw className="w-3 h-3 animate-spin" /> Sincronizando...
+            </Badge>
+          ) : isConnected ? (
+            <Badge variant="emerald" className="text-[10px]">
+              <Wifi className="w-3 h-3" /> Conectado
+            </Badge>
+          ) : (
+            <Badge variant="amber" className="text-[10px]">
+              <WifiOff className="w-3 h-3" /> Sin conexión
+            </Badge>
+          )}
           <Badge variant="purple" className="text-[10px]">
             <Radio className="w-3 h-3 animate-pulse" /> {roomId}
           </Badge>
+          <VersionBadge version={CARBEAT_VERSION} compact />
           <span className="text-xs font-semibold text-white">{djName}</span>
         </div>
       </header>
@@ -147,14 +251,22 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
       <div className="my-2.5 p-3 rounded-2xl bg-gradient-to-r from-cyan-950/40 to-slate-900/60 border border-cyan-500/30 flex flex-col gap-2 shadow-xl shadow-cyan-950/30">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <TrackCover
-              src={livePlayback.currentTrack?.coverUrl}
-              alt="Car Playing"
-              className="w-11 h-11 rounded-xl shadow-md"
-            />
+            <div className="relative">
+              <TrackCover
+                src={livePlayback.currentTrack?.coverUrl}
+                alt="Car Playing"
+                className="w-11 h-11 rounded-xl shadow-md"
+              />
+              {livePlayback.isPlaying && (
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+                  <Volume2 className="w-2.5 h-2.5 text-white" />
+                </div>
+              )}
+            </div>
             <div className="min-w-0 text-left">
               <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                <Volume2 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" /> Sonando en el Carro
+                <Volume2 className={`w-3.5 h-3.5 text-cyan-400 ${livePlayback.isPlaying ? 'animate-pulse' : ''}`} />
+                Sonando en el Carro
               </span>
               <h4 className="text-sm font-bold text-white truncate">
                 {livePlayback.currentTrack?.title || 'En espera de reproducción'}
@@ -168,11 +280,18 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
             {livePlayback.isPlaying ? 'En Vivo' : 'En Pausa'}
           </Badge>
         </div>
-        <div className="h-1.5 w-full bg-slate-800/80 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-cyan-500 to-sky-400 transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          />
+        {/* Barra de progreso con tiempo */}
+        <div className="space-y-1">
+          <div className="h-1.5 w-full bg-slate-800/80 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-cyan-500 to-sky-400 transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+            <span>{formatTime(livePlayback.currentTime)}</span>
+            <span>{formatTime(livePlayback.duration)}</span>
+          </div>
         </div>
       </div>
 
@@ -205,7 +324,7 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
       {/* Contenido Principal */}
       <GlassCard className="flex-1 my-1 p-3.5 sm:p-4 overflow-hidden flex flex-col min-h-[300px]">
         {activeView === 'catalog' ? (
-          <CatalogBrowser catalog={catalog} onQueueTrack={handleQueueTrack} />
+          <CatalogBrowser catalog={catalog} onQueueTrack={handleQueueTrack} onSearchWeb={handleSearchWeb} />
         ) : (
           <QueueVoteList queue={queue} onVote={handleVote} />
         )}
