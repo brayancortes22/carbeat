@@ -30,7 +30,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   const [isAnnouncing, setIsAnnouncing] = useState(false);
   const [hostLanIp, setHostLanIp] = useState(window.location.hostname);
 
-  const { channel, connectedDjs, broadcastSync, closeRoom } = useHostRoomChannel({
+  const { channel, connectedDjs, broadcastSync, enqueueTrack, closeRoom } = useHostRoomChannel({
     roomId,
     catalog,
     setCatalog,
@@ -110,15 +110,12 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
 
   // Autopilot IA: Encolar canción de 1 en 1 sin saturar la red
   const handleEnqueueAutopilot = useCallback((track: Track) => {
-    channel.send('QUEUE_TRACK', 'host', 'IA Autopilot ⚡', {
-      track,
-      requestedBy: 'IA Autopilot',
-      isAutopilot: true,
-    });
-  }, [channel]);
+    enqueueTrack(track, 'IA Autopilot', true);
+  }, [enqueueTrack]);
 
   const { isAutopilotActive, toggleAutopilot } = useHostAutopilot({
     currentTrack: playerState.currentTrack,
+    catalog,
     queue,
     onEnqueueTrack: handleEnqueueAutopilot,
   });
@@ -130,11 +127,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   };
 
   const handleAddToQueueFromDriver = (track: Track) => {
-    channel.send('QUEUE_TRACK', 'host', 'Conductor 🚗', {
-      track,
-      requestedBy: 'Conductor',
-      isAutopilot: false,
-    });
+    enqueueTrack(track, 'Conductor', false);
   };
 
   const handlePurgeQueue = () => {
