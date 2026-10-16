@@ -145,8 +145,23 @@ export function useHostRoomChannel({
       }
     });
 
-    return () => unsub();
-  }, [channel, enqueueTrack, broadcastSync, setQueue]);
+    // Enviar latido HTTP del Host a la nube cada 3.5 segundos para que la sala nunca expire
+    const hostHeartbeat = setInterval(() => {
+      fetch('/api/room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'HOST_ANNOUNCE',
+          payload: { roomId, roomName: `Carro ${roomId}` },
+        }),
+      }).catch(() => {});
+    }, 3500);
+
+    return () => {
+      unsub();
+      clearInterval(hostHeartbeat);
+    };
+  }, [channel, roomId, enqueueTrack, broadcastSync, setQueue]);
 
   const closeRoom = async (onDone: () => void) => {
     globalAudioEngine.pause();

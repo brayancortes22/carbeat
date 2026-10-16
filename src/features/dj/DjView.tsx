@@ -134,7 +134,12 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
       {/* Contenido Principal */}
       <GlassCard className="flex-1 my-1 p-3.5 sm:p-4 overflow-hidden flex flex-col min-h-[300px]">
         {activeView === 'catalog' ? (
-          <CatalogBrowser catalog={catalog} onQueueTrack={handleQueueTrack} />
+          <CatalogBrowser
+            catalog={catalog}
+            currentTrackId={livePlayback.currentTrack?.id}
+            currentTrackTitle={livePlayback.currentTrack?.title}
+            onQueueTrack={handleQueueTrack}
+          />
         ) : (
           <QueueVoteList queue={queue} onVote={handleVote} />
         )}
