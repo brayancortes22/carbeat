@@ -56,6 +56,8 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     });
   }, []);
 
+  const lastPrevClickRef = useRef<number>(0);
+
   // Manejar el avance a la siguiente canción
   const handleNext = useCallback(() => {
     const current = globalAudioEngine.getState().currentTrack;
@@ -70,24 +72,42 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
       setQueue((prev) => prev.slice(1));
       globalAudioEngine.loadTrack(nextItem.track, true);
     } else if (currentCatalog.length > 0) {
-      const randomIdx = Math.floor(Math.random() * currentCatalog.length);
-      globalAudioEngine.loadTrack(currentCatalog[randomIdx], true);
+      const currentIdx = current ? currentCatalog.findIndex((t) => t.id === current.id) : -1;
+      const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % currentCatalog.length : 0;
+      globalAudioEngine.loadTrack(currentCatalog[nextIdx], true);
     }
   }, []);
 
-  // Manejar retroceso a la canción anterior con historial real
+  // Manejar retroceso a la canción anterior con historial real y fallback de catálogo
   const handlePrev = useCallback(() => {
     const currentState = globalAudioEngine.getState();
-    if (currentState.currentTime > 3) {
+    const now = Date.now();
+    const isRapidClick = now - lastPrevClickRef.current < 2500;
+    lastPrevClickRef.current = now;
+
+    // Si lleva más de 3 segundos y es el primer clic, reiniciar inicio de pista
+    if (currentState.currentTime > 3 && !isRapidClick) {
       globalAudioEngine.seek(0);
       return;
     }
+
+    // 1. Prioridad: Desapilar pista previa del historial real
     if (historyRef.current.length > 0) {
       const prevTrack = historyRef.current.pop()!;
       globalAudioEngine.loadTrack(prevTrack, true);
-    } else {
-      globalAudioEngine.seek(0);
+      return;
     }
+
+    // 2. Fallback: Pista anterior en el catálogo del vehículo
+    const currentCat = catalogRef.current;
+    if (currentCat.length > 1 && currentState.currentTrack) {
+      const currentIdx = currentCat.findIndex((t) => t.id === currentState.currentTrack?.id);
+      const prevIdx = currentIdx > 0 ? currentIdx - 1 : currentCat.length - 1;
+      globalAudioEngine.loadTrack(currentCat[prevIdx], true);
+      return;
+    }
+
+    globalAudioEngine.seek(0);
   }, []);
 
   // Suscribirse a cambios de audio y difundir a los DJs
@@ -191,7 +211,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   };
 
   return (
-    <div className="min-h-screen bg-[#07080D] p-3 sm:p-6 flex flex-col justify-between">
+    <div className="min-h-screen w-full bg-[#07080D] p-3 sm:p-5 flex flex-col justify-between">
       <HostHeader
         catalogCount={catalog.length}
         isAnnouncing={isAnnouncing}
@@ -201,7 +221,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
         onFolderSelect={handleFolderSelect}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 my-auto py-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 my-auto py-3">
         <div className="lg:col-span-3 flex flex-col justify-center">
           <RoomQrBadge roomId={roomId} connectedCount={connectedDjs.length} />
         </div>
@@ -240,7 +260,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
         </div>
       </div>
 
-      <footer className="text-center text-[10px] text-slate-600 font-mono">
+      <footer className="text-center text-[10px] text-slate-600 font-mono py-1">
         CarBeat Cabina Activa • Audio Master Local • Modo Pasajeros / Chofer Sincronizado
       </footer>
 
@@ -256,6 +276,10 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
         onClose={() => setIsLibraryOpen(false)}
         onPlayNow={handlePlayNow}
         onAddToQueue={handleAddToQueueFromDriver}
+        onCatalogUpdated={(newTracks) => {
+          setCatalog(newTracks);
+          broadcastSync(queueRef.current, newTracks);
+        }}
       />
     </div>
   );

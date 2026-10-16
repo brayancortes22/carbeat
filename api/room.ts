@@ -28,9 +28,9 @@ export default async function handler(req: any, res: any) {
 
   const action = (req.query?.action as string) || '';
   const now = Date.now();
-  const INACTIVE_TIMEOUT_MS = 10000; // 10 segundos sin señal = sala inactiva
+  const INACTIVE_TIMEOUT_MS = 6000; // 6 segundos sin latido = sala inactiva
 
-  // Limpiar salas inactivas (>10 segundos sin señal del host)
+  // Limpiar salas inactivas (>6 segundos sin señal del host)
   for (const [id, r] of roomsStore.entries()) {
     if (now - r.hostLastSeen > INACTIVE_TIMEOUT_MS) {
       roomsStore.delete(id);
@@ -57,14 +57,13 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json(activeRooms);
   }
 
-  const roomId = ((req.query?.roomId as string) || 'BEAT-784').toUpperCase();
-
   // 2. GET: Consulta de estado de sala y verificación de existencia
   if (req.method === 'GET') {
+    const roomId = ((req.query?.roomId as string) || '').toUpperCase().trim();
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const existing = roomsStore.get(roomId);
 
-    // Si la sala no existe o su host lleva más de 10s desconectado
+    // Si la sala no existe o su host lleva más de 6s desconectado
     if (!existing || now - existing.hostLastSeen > INACTIVE_TIMEOUT_MS) {
       if (existing) roomsStore.delete(roomId);
       return res.status(200).json({
@@ -88,46 +87,50 @@ export default async function handler(req: any, res: any) {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
       const { type, payload } = body;
+      const targetRoomId = (body.roomId || payload?.roomId || (req.query?.roomId as string) || '').toUpperCase().trim();
 
-      // Obtener o registrar sala
-      if (!roomsStore.has(roomId)) {
-        roomsStore.set(roomId, {
-          roomId,
-          roomName: `CarBeat ${roomId}`,
-          hostIp: 'Nube Vercel',
-          hostLastSeen: Date.now(),
-          currentTrack: null,
-          isPlaying: false,
-          currentTime: 0,
-          duration: 0,
-          queue: [],
-          djs: {},
-          lastUpdated: Date.now(),
-        });
+      if (!targetRoomId) {
+        return res.status(400).json({ error: 'Falta roomId' });
       }
-
-      const room = roomsStore.get(roomId)!;
 
       // A) Cierre de Sala por el Chofer (Detener y expulsar a todos)
       if (type === 'CLOSE_ROOM' || type === 'ROOM_CLOSED' || body.action === 'close' || payload?.action === 'close') {
-        roomsStore.delete(roomId);
+        roomsStore.delete(targetRoomId);
         return res.status(200).json({ ok: true, closed: true, message: 'Sala cerrada por el conductor' });
       }
 
-      // B) Purga de un tacazo de la cola de peticiones
-      if (type === 'PURGE_QUEUE') {
-        room.queue = [];
-        room.lastUpdated = Date.now();
-        return res.status(200).json(room);
+      // B) Anuncio del Host (Pantalla del Carro) -> Solo aquí se crea o renueva la sala
+      if (type === 'HOST_ANNOUNCE') {
+        let room = roomsStore.get(targetRoomId);
+        if (!room) {
+          room = {
+            roomId: targetRoomId,
+            roomName: payload?.roomName || `CarBeat ${targetRoomId}`,
+            hostIp: payload?.hostIp || 'Nube Vercel',
+            hostLastSeen: Date.now(),
+            currentTrack: null,
+            isPlaying: false,
+            currentTime: 0,
+            duration: 0,
+            queue: [],
+            djs: {},
+            lastUpdated: Date.now(),
+          };
+          roomsStore.set(targetRoomId, room);
+        } else {
+          room.hostLastSeen = Date.now();
+          if (payload?.roomName) room.roomName = payload.roomName;
+          if (payload?.hostIp) room.hostIp = payload.hostIp;
+          room.lastUpdated = Date.now();
+        }
+        return res.status(200).json({ ok: true, roomId: targetRoomId });
       }
 
-      // C) Anuncio del Host (Pantalla del Carro)
-      if (type === 'HOST_ANNOUNCE') {
-        room.hostLastSeen = Date.now();
-        if (payload?.roomName) room.roomName = payload.roomName;
-        if (payload?.hostIp) room.hostIp = payload.hostIp;
-        room.lastUpdated = Date.now();
-        return res.status(200).json({ ok: true, roomId });
+      // Si la sala no existe en roomsStore, no se pueden enviar mutaciones de DJ
+      const room = roomsStore.get(targetRoomId);
+      if (!room || now - room.hostLastSeen > INACTIVE_TIMEOUT_MS) {
+        if (room) roomsStore.delete(targetRoomId);
+        return res.status(404).json({ exists: false, error: `La sala "${targetRoomId}" está inactiva o cerrada.` });
       }
 
       // B) Heartbeat de DJ (Pasajero activo)
@@ -140,6 +143,13 @@ export default async function handler(req: any, res: any) {
       if (type === 'ROOM_LEAVE' && payload?.djName) {
         delete room.djs[payload.djName];
         return res.status(200).json({ ok: true });
+      }
+
+      // Purga de cola por el conductor
+      if (type === 'PURGE_QUEUE') {
+        room.queue = [];
+        room.lastUpdated = Date.now();
+        return res.status(200).json(room);
       }
 
       // D) Pedir canción a la cola (Deduplicación estricta y suma de votos)

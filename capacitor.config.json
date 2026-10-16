@@ -4,7 +4,6 @@
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
-    "url": "https://carbeat-pi.vercel.app",
     "cleartext": true,
     "androidScheme": "https"
   },
