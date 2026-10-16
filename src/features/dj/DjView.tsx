@@ -8,7 +8,6 @@ import { TrackCover } from '../../components/ui/TrackCover';
 import { RoomChannel } from '../../core/network/room-channel';
 import { MOCK_CAR_TRACKS } from '../../core/audio/mock-library';
 import { QueueItem, Track } from '../../types/track.types';
-import { MusicSearchService } from '../../core/network/music-search-service';
 import { StorageService } from '../../core/storage/storage-service';
 import { CARBEAT_VERSION } from '../../core/version';
 import { VersionBadge } from '../../components/ui/VersionBadge';
@@ -155,14 +154,24 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
   }, [queue]);
 
   const handleQueueTrack = useCallback((track: Track) => {
-    const newItem: QueueItem = {
-      queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      track,
-      votes: 1,
-      requestedBy: djName,
-      requestedAt: Date.now(),
-    };
-    setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
+    setQueue((prev) => {
+      const isDuplicate = prev.some(
+        (item) =>
+          item.track.id === track.id ||
+          item.track.title.toLowerCase().trim() === track.title.toLowerCase().trim()
+      );
+      if (isDuplicate) return prev;
+
+      const newItem: QueueItem = {
+        queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        track,
+        votes: 1,
+        requestedBy: djName,
+        requestedAt: Date.now(),
+      };
+      return [...prev, newItem].sort((a, b) => b.votes - a.votes);
+    });
+
     channel.send('QUEUE_TRACK', djName, djName, { track, requestedBy: djName });
     showToast(`"${track.title}" enviada al carro`);
   }, [channel, djName]);
@@ -182,31 +191,7 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
     };
     setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
     channel.send('QUEUE_TRACK', djName, djName, { track, requestedBy: djName });
-    showToast(`"${track.title}" enviada al carro y puesta en cola`);
   }, [channel, djName]);
-
-  // Buscar en la web cuando no se encuentra localmente
-  const handleSearchWeb = useCallback(async (query: string) => {
-    if (!navigator.onLine) {
-      showToast('Sin conexión a internet');
-      return;
-    }
-    try {
-      const results = await MusicSearchService.searchOnline(query, djName);
-      if (results.length > 0) {
-        setCatalog((prev) => {
-          const existingIds = new Set(prev.map((t) => t.id));
-          const newTracks = results.filter((t) => !existingIds.has(t.id));
-          return [...newTracks, ...prev];
-        });
-        showToast(`${results.length} canciones encontradas en la web`);
-      } else {
-        showToast('No se encontraron resultados en la web');
-      }
-    } catch {
-      showToast('Error buscando en la web');
-    }
-  }, [djName]);
 
   const progressPercent = livePlayback.duration > 0
     ? (livePlayback.currentTime / livePlayback.duration) * 100
@@ -328,7 +313,7 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
       {/* Contenido Principal */}
       <GlassCard className="flex-1 my-1 p-3.5 sm:p-4 overflow-hidden flex flex-col min-h-[300px]">
         {activeView === 'catalog' ? (
-          <CatalogBrowser catalog={catalog} onQueueTrack={handleQueueTrack} onSearchWeb={handleSearchWeb} />
+          <CatalogBrowser catalog={catalog} onQueueTrack={handleQueueTrack} />
         ) : (
           <QueueVoteList queue={queue} onVote={handleVote} />
         )}

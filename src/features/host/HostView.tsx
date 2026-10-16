@@ -157,12 +157,18 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
       if (msg.type === 'QUEUE_TRACK') {
         const payload = msg.payload as { track: Track; requestedBy: string };
 
-        // Asegurar que la nueva pista quede en el catálogo del host
-        if (!catalogRef.current.some((t) => t.id === payload.track.id)) {
-          const updatedCatalog = [payload.track, ...catalogRef.current];
-          catalogRef.current = updatedCatalog;
-          setCatalog(updatedCatalog);
-        }
+        // Asegurar que la nueva pista quede en el catálogo del host sin duplicados
+        const updatedCatalog = StorageService.deduplicateTracks([payload.track, ...catalogRef.current]);
+        catalogRef.current = updatedCatalog;
+        setCatalog(updatedCatalog);
+
+        const isAlreadyInQueue = queueRef.current.some(
+          (item) =>
+            item.track.id === payload.track.id ||
+            item.track.title.toLowerCase().trim() === payload.track.title.toLowerCase().trim()
+        );
+
+        if (isAlreadyInQueue) return;
 
         const newItem: QueueItem = {
           queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
