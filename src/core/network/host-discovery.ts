@@ -173,17 +173,29 @@ export function startHostScanner(
       if (res.ok) {
         const rooms = (await res.json()) as any[];
         if (Array.isArray(rooms)) {
+          const now = Date.now();
+          const activeIds = new Set<string>();
+
           rooms.forEach((r) => {
+            activeIds.add(r.roomId);
             const host: DiscoveredHost = {
               roomId: r.roomId,
               roomName: r.roomName || `CarBeat ${r.roomId}`,
               hostIp: r.hostIp || 'Nube Vercel',
               port: 443,
-              lastSeen: r.lastSeen || Date.now(),
+              lastSeen: r.lastSeen || now,
               djCount: r.djCount || 0,
             };
             discoveredHosts.set(host.roomId, host);
           });
+
+          // Purgar inmediatamente salas que el servidor ya no reporta
+          for (const [id, h] of discoveredHosts.entries()) {
+            if (!activeIds.has(id) && (now - h.lastSeen > 6000)) {
+              discoveredHosts.delete(id);
+            }
+          }
+
           notifyScanCallback();
         }
       }
@@ -194,6 +206,19 @@ export function startHostScanner(
 
   fetchHttpRooms();
   scanHttpInterval = setInterval(fetchHttpRooms, 1500);
+
+  // Intervalo de purga local para hosts desconectados (>8 segundos sin señal)
+  cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    let changed = false;
+    for (const [id, h] of discoveredHosts.entries()) {
+      if (now - h.lastSeen > 8000) {
+        discoveredHosts.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) notifyScanCallback();
+  }, 1500);
 
   // 2. Conexión WebSocket para desarrollo local / red hotspot
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
