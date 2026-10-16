@@ -115,7 +115,7 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
               : 'bg-white/[0.03] text-slate-400 hover:text-white border border-white/5'
           }`}
         >
-          Explorar Música ({catalog.length})
+          Explorar Música
         </button>
         <button
           onClick={() => setActiveView('queue')}

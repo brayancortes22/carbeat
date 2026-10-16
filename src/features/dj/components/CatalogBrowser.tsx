@@ -72,9 +72,16 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
 
   // Canciones a mostrar: resultados de búsqueda o catálogo enriquecido siempre con tendencias
   const displayTracks = React.useMemo(() => {
+    const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
     const isCurrentPlaying = (t: Track) => {
-      if (currentTrackId && t.id === currentTrackId) return true;
-      if (currentTrackTitle && t.title.toLowerCase().trim() === currentTrackTitle.toLowerCase().trim()) return true;
+      if (!t) return false;
+      if (currentTrackId && (t.id === currentTrackId || (t.videoId && currentTrackId.includes(t.videoId)))) return true;
+      if (currentTrackTitle) {
+        const normT = norm(t.title);
+        const normCur = norm(currentTrackTitle);
+        if (normT && normCur && (normT === normCur || normT.includes(normCur) || normCur.includes(normT))) return true;
+      }
       return false;
     };
 
@@ -85,10 +92,10 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     const seen = new Set<string>();
     const result: Track[] = [];
 
-    // 1. Agregar temas del catálogo (excluyendo el que suena)
+    // 1. Agregar temas del catálogo del carro (excluyendo el que suena)
     catalog.forEach((t) => {
       if (!isCurrentPlaying(t)) {
-        const key = `${t.title.toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`;
+        const key = `${norm(t.title)}_${norm(t.artist)}`;
         if (!seen.has(key)) {
           seen.add(key);
           result.push(t);
@@ -99,7 +106,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     // 2. Complementar SIEMPRE con las tendencias recomendadas del viaje
     TOP_TRENDING_TRACKS.forEach((t) => {
       if (!isCurrentPlaying(t)) {
-        const key = `${t.title.toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`;
+        const key = `${norm(t.title)}_${norm(t.artist)}`;
         if (!seen.has(key)) {
           seen.add(key);
           result.push(t);
