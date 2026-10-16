@@ -3,6 +3,7 @@ import { Track, QueueItem } from '../../types/track.types';
 const STORAGE_KEYS = {
   CATALOG: 'carbeat_local_catalog_v3',
   QUEUE: 'carbeat_local_queue_v3', // v3: purga automática de cualquier cola sucia previa
+  DRIVER_LIBRARY: 'carbeat_driver_library_v1',
   ROOM_ID: 'carbeat_saved_room_id',
   DJ_NAME: 'carbeat_saved_dj_name',
 } as const;
@@ -81,6 +82,49 @@ export class StorageService {
     } catch {
       return [];
     }
+  }
+
+  public static clearQueue(): void {
+    try {
+      if (typeof window === 'undefined') return;
+      localStorage.removeItem(STORAGE_KEYS.QUEUE);
+    } catch {}
+  }
+
+  public static loadDriverLibrary(): Track[] {
+    try {
+      if (typeof window === 'undefined') return [];
+      const data = localStorage.getItem(STORAGE_KEYS.DRIVER_LIBRARY);
+      if (!data) return [];
+      const parsed = JSON.parse(data) as Track[];
+      return Array.isArray(parsed) ? this.deduplicateTracks(parsed) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public static saveDriverLibrary(tracks: Track[]): void {
+    try {
+      if (typeof window === 'undefined') return;
+      const clean = this.deduplicateTracks(tracks);
+      localStorage.setItem(STORAGE_KEYS.DRIVER_LIBRARY, JSON.stringify(clean));
+    } catch (e) {
+      console.warn('[StorageService] Error guardando biblioteca del chofer:', e);
+    }
+  }
+
+  public static addToDriverLibrary(track: Track): Track[] {
+    const current = this.loadDriverLibrary();
+    const updated = this.deduplicateTracks([{ ...track, source: 'local_car', addedBy: 'Chofer (Carro)' }, ...current]);
+    this.saveDriverLibrary(updated);
+    return updated;
+  }
+
+  public static removeFromDriverLibrary(trackId: string): Track[] {
+    const current = this.loadDriverLibrary();
+    const updated = current.filter((t) => t.id !== trackId);
+    this.saveDriverLibrary(updated);
+    return updated;
   }
 
   public static saveRoomInfo(roomId: string, djName?: string): void {

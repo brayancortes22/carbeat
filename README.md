@@ -1,24 +1,30 @@
-# 🚗 CarBeat: Collaborative In-Car Jukebox & DJ System
+# 🚗 CarBeat: Collaborative In-Car Jukebox & DJ System (v1.2.0)
 
 Sistema colaborativo de música en tiempo real para vehículos y viajes. Convierte la pantalla del carro (Tablet, Android Auto, Navegador) en un reproductor central (Host) y permite que los pasajeros se unan como DJs desde sus teléfonos móviles sin descargas obligatorias para proponer y votar canciones en vivo.
 
 ---
 
-## 🌟 Características Principales
+## 🌟 Novedades de la Versión 1.2.0
 
-- **Reproducción Completa al 100% (Sin Cortes de 30 Segundos):**
-  - Motor Híbrido Universal: Integración con **YouTube Music (IFrame API)** para canciones completas de 3 a 6+ minutos con calidad oficial.
-  - Soporte **Audius Direct Stream (MP3 completo)** y archivos locales (USB / almacenamiento del vehículo).
-  - Auto-actualizador transparente: Las pistas de catálogo con clips breves se resuelven y enlazan automáticamente a su versión completa en YouTube.
-- **Descubrimiento Automático por Wi-Fi:**
-  - Los DJs pueden pulsar *"Escanear Carros Cercanos"* y detectar el Host del vehículo en menos de 1 segundo mediante el protocolo WebSocket de descubrimiento (`/ws-discovery`) con caché inmediata.
-  - Auto-resolución de IPs de red local (LAN/Hotspot) para evitar problemas de conexión al apuntar a `localhost`.
-- **Sincronización Tri-Capa Resiliente (OmniRoute Pattern):**
-  - **Capa 1 (WebSocket Local):** Ultra baja latencia (<20ms) en la red local o punto de acceso Wi-Fi del vehículo.
-  - **Capa 2 (WebRTC P2P DataChannel con PeerJS):** Conexión directa peer-to-peer cifrada que funciona tanto en despliegues cloud (Vercel) como a través de datos móviles 4G/5G.
-  - **Capa 3 (BroadcastChannel):** Sincronización inmediata entre pestañas del mismo navegador para desarrollo y pruebas.
-- **Búsqueda Multi-Fuente:**
-  - Búsqueda en YouTube Music (protocolo Innertube WEB_REMIX), Audius y catálogo local.
+- **🤖 Modo Autopilot IA (DJ Autónomo Inteligente):**
+  - Cuando la cola se vacía o queda una sola canción, el motor de IA predice y encola de **1 en 1** temas armónicamente afines basados en lo que está sonando (`/api/yt/related`).
+  - Previene saturaciones de red o peticiones masivas y filtra canciones ya reproducidas.
+- **🚗 Biblioteca Personal del Chofer:**
+  - El conductor puede guardar pistas individuales o vaciar la cola de pasajeros a su colección personal persistente (`driver_library_v1`).
+  - Acceso instantáneo a su propia música desde el botón "Mi Música" para reproducirla en cualquier momento durante el viaje.
+- **⚡ Purga de Cola de un Solo Tacazo:**
+  - Botón "Vaciar" en el panel del carro para eliminar todas las peticiones de los pasajeros de inmediato con confirmación de seguridad y sincronización instantánea a todos los celulares.
+- **🏷️ Distinción Visual de Origen de Pistas:**
+  - Badges intuitivos en tiempo real tanto en la pantalla del vehículo como en los celulares de los pasajeros:
+    - `[🚗 Chofer / Carro]` para música del conductor o archivos locales/USB.
+    - `[📱 Pasajero: Nombre]` para peticiones de los acompañantes.
+    - `[✨ IA Autopilot]` para recomendaciones generadas por la IA.
+- **🚪 Cierre de Sala y Expulsión Limpia:**
+  - Al salir del Modo Carro, el reproductor apaga de inmediato el audio (`pause()`), destruye la sala en el backend y emite `CLOSE_ROOM`, mostrando un modal de fin de viaje y regresando a todos los pasajeros al inicio.
+- **📱 App Móvil Android (APK Oficial Compilado):**
+  - Instalador nativo Android (`carbeat-latest.apk`) compilado con Capacitor 8 y JDK 21 vía GitHub Actions, listo para descargar e instalar con 1 click.
+- **🔄 Auto-Actualización Dinámica de Versión:**
+  - Badge dinámico (`v1.2.0`) que consulta periódicamente `/api/version`, alerta sobre nuevas versiones con pulsos visuales y permite actualizar la aplicación al instante.
 
 ---
 
@@ -29,17 +35,21 @@ Sistema colaborativo de música en tiempo real para vehículos y viajes. Convier
    ├── AudioEngine (Híbrido)
    │     ├── YouTubePlayerBridge (YouTube IFrame API - Full Songs)
    │     └── HTML5 Audio (USB / Audius MP3)
-   └── RoomChannel (Tri-Capa)
-         ├── Capa 1: WebSocket Local (/ws-rooms)
-         ├── Capa 2: WebRTC DataChannel (PeerJS P2P: carbeat-room-{ID})
-         └── Capa 3: BroadcastChannel
-               ▲
-               │ Sincronización en tiempo real
-               ▼
+   ├── RoomChannel (Cuatri-Capa Resiliente)
+   │     ├── Capa 1: WebSocket Local (/ws-rooms)
+   │     ├── Capa 2: WebRTC DataChannel (PeerJS P2P: carbeat-room-{ID})
+   │     ├── Capa 3: HTTP Serverless Relay (/api/room en Vercel)
+   │     └── Capa 4: BroadcastChannel (Local tabs)
+   ├── AiAutopilotService (DJ Autónomo predictivo 1-a-1)
+   └── DriverLibrary (Almacenamiento persistente del chofer)
+         ▲
+         │ Sincronización en tiempo real (<20ms local / <200ms cloud)
+         ▼
 [ Mobile Passengers / DJs ]
-   ├── DjView (Explorador + Cola de Votaciones)
-   ├── HostScannerModal (Escaneo Wi-Fi /ws-discovery)
-   └── OmniMusicGateway (Búsqueda en cascada)
+   ├── DjView (Explorador + Cola de Votaciones con Badges)
+   ├── HostScannerModal (Escaneo Wi-Fi /ws-discovery + HTTP)
+   ├── RoomClosedModal (Expulsión elegante al terminar el viaje)
+   └── OmniMusicGateway (Búsqueda en YouTube Music, Audius y Catálogo)
 ```
 
 ---
@@ -72,9 +82,9 @@ npm run build
 ---
 
 ## 🌿 Estrategia de Ramas Git (Regla de Oro)
-1. `development`: Desarrollo activo y pruebas de integración.
-2. `qa`: Aseguramiento de calidad y validación previa a producción.
-3. `main`: Producción oficial y estable con despliegue automático a Vercel.
+1. `development`: Desarrollo activo y pruebas de integración de nuevas funcionalidades.
+2. `qa`: Aseguramiento de calidad, staging y validación previa a producción.
+3. `main`: Producción oficial y estable con despliegue automático a Vercel y compilación de APK en GitHub Actions.
 
 ---
 

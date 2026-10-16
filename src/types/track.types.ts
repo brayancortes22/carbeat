@@ -19,4 +19,5 @@ export interface QueueItem {
   votes: number;
   requestedBy: string;
   requestedAt: number;
+  isAutopilot?: boolean;
 }
