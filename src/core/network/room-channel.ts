@@ -13,6 +13,7 @@ export class RoomChannel {
   private ws: WebSocket | null = null;
   private broadcast: BroadcastChannel | null = null;
   private handlers: Set<MessageHandler> = new Set();
+  private pendingQueue: string[] = [];
   private isConnected = false;
   private isClosed = false;
 
@@ -40,10 +41,17 @@ export class RoomChannel {
   private initWebSocket(url: string): void {
     try {
       this.ws = new WebSocket(`${url}?room=${encodeURIComponent(this.roomId)}`);
+      
       this.ws.onopen = () => {
         this.isConnected = true;
-        console.log('[RoomChannel] WebSocket conectado exitosamente a la sala:', this.roomId);
+        console.log('[RoomChannel] WS conectado a la sala:', this.roomId);
+        // Vaciar inmediatamente todos los mensajes acumulados mientras conectaba
+        while (this.pendingQueue.length > 0 && this.ws?.readyState === WebSocket.OPEN) {
+          const pending = this.pendingQueue.shift();
+          if (pending) this.ws.send(pending);
+        }
       };
+
       this.ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as RoomMessage;
@@ -52,17 +60,18 @@ export class RoomChannel {
           console.error('[RoomChannel] Error parseando JSON de WS:', e);
         }
       };
+
       this.ws.onclose = () => {
         this.isConnected = false;
-        // Reintentar conexión después de 2 segundos si no fue cerrado explícitamente
         if (!this.isClosed) {
           setTimeout(() => {
             if (!this.isClosed) this.initWebSocket(url);
-          }, 2000);
+          }, 1500);
         }
       };
+
       this.ws.onerror = (err) => {
-        console.warn('[RoomChannel] WS error, fallback a broadcast local:', err);
+        console.warn('[RoomChannel] WS connection issue:', err);
       };
     } catch (e) {
       console.warn('[RoomChannel] Fallo iniciando WebSocket:', e);
@@ -81,16 +90,22 @@ export class RoomChannel {
       payload,
     };
 
-    // Enviar a WebSocket hacia los demás dispositivos
+    const rawString = JSON.stringify(msg);
+
+    // Si el socket ya está abierto, enviar inmediatamente
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
-        this.ws.send(JSON.stringify(msg));
+        this.ws.send(rawString);
       } catch (err) {
-        console.warn('[RoomChannel] Fallo envío WS:', err);
+        console.warn('[RoomChannel] Error enviando por WS:', err);
+        this.pendingQueue.push(rawString);
       }
+    } else {
+      // Si aún está conectando, encolar para enviar apenas abra
+      this.pendingQueue.push(rawString);
     }
 
-    // Enviar a BroadcastChannel local
+    // Difundir también en canal local por si hay pestañas hermanas
     try {
       if (!this.broadcast) {
         this.initBroadcast();
@@ -127,6 +142,7 @@ export class RoomChannel {
       this.broadcast = null;
     }
     this.handlers.clear();
+    this.pendingQueue = [];
   }
 
   public getStatus(): boolean {

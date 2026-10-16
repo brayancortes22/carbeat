@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Track } from '../../../types/track.types';
-import { Search, Plus, Music, Disc } from 'lucide-react';
+import { Search, Plus, Music, Check } from 'lucide-react';
 import { Badge } from '../../../components/ui/Badge';
+import { TrackCover } from '../../../components/ui/TrackCover';
 
 interface CatalogBrowserProps {
   catalog: Track[];
@@ -11,6 +12,7 @@ interface CatalogBrowserProps {
 export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueueTrack }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'local' | 'passengers'>('all');
+  const [requestingId, setRequestingId] = useState<string | null>(null);
 
   const filteredTracks = useMemo(() => {
     return catalog.filter((track) => {
@@ -25,6 +27,12 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueue
       return true;
     });
   }, [catalog, searchTerm, activeTab]);
+
+  const handleQueueClick = (track: Track) => {
+    setRequestingId(track.id);
+    onQueueTrack(track);
+    setTimeout(() => setRequestingId(null), 1200);
+  };
 
   return (
     <div className="flex flex-col h-full space-y-3">
@@ -44,19 +52,19 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueue
       <div className="flex items-center gap-2 text-xs">
         <button
           onClick={() => setActiveTab('all')}
-          className={`px-3 py-1 rounded-lg font-medium transition-all ${activeTab === 'all' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800/60 text-slate-400 hover:text-white'}`}
+          className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${activeTab === 'all' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800/60 text-slate-400 hover:text-white'}`}
         >
           Todas ({catalog.length})
         </button>
         <button
           onClick={() => setActiveTab('local')}
-          className={`px-3 py-1 rounded-lg font-medium transition-all ${activeTab === 'local' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800/60 text-slate-400 hover:text-white'}`}
+          className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${activeTab === 'local' ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800/60 text-slate-400 hover:text-white'}`}
         >
           Música del Carro
         </button>
         <button
           onClick={() => setActiveTab('passengers')}
-          className={`px-3 py-1 rounded-lg font-medium transition-all ${activeTab === 'passengers' ? 'bg-purple-500 text-white font-bold' : 'bg-slate-800/60 text-slate-400 hover:text-white'}`}
+          className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${activeTab === 'passengers' ? 'bg-purple-500 text-white font-bold' : 'bg-slate-800/60 text-slate-400 hover:text-white'}`}
         >
           Aportes DJ
         </button>
@@ -70,41 +78,52 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueue
             No se encontraron canciones con ese nombre.
           </div>
         ) : (
-          filteredTracks.map((track) => (
-            <div
-              key={track.id}
-              className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:border-cyan-500/30 transition-all group"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-800 shrink-0 flex items-center justify-center">
-                  {track.coverUrl ? (
-                    <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
-                  ) : (
-                    <Disc className="w-5 h-5 text-slate-600" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <h4 className="text-sm font-semibold text-white truncate">{track.title}</h4>
-                  <p className="text-xs text-slate-400 truncate">{track.artist}</p>
-                </div>
-              </div>
+          filteredTracks.map((track) => {
+            const isRequesting = requestingId === track.id;
 
-              <div className="flex items-center gap-2 shrink-0">
-                {track.source === 'passenger_dj' && (
-                  <Badge variant="purple" className="text-[9px] py-0 px-1.5 hidden sm:inline-flex">
-                    {track.addedBy || 'DJ'}
-                  </Badge>
-                )}
-                <button
-                  onClick={() => onQueueTrack(track)}
-                  title="Pedir canción"
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-slate-950 font-semibold text-xs border border-cyan-500/20 transition-all active:scale-95 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Pedir
-                </button>
+            return (
+              <div
+                key={track.id}
+                className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5 hover:border-cyan-500/30 transition-all group"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <TrackCover src={track.coverUrl} alt={track.title} className="w-10 h-10 rounded-lg" />
+                  <div className="min-w-0 text-left">
+                    <h4 className="text-sm font-semibold text-white truncate">{track.title}</h4>
+                    <p className="text-xs text-slate-400 truncate">{track.artist}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {track.source === 'passenger_dj' && (
+                    <Badge variant="purple" className="text-[9px] py-0 px-1.5 hidden sm:inline-flex">
+                      {track.addedBy || 'DJ'}
+                    </Badge>
+                  )}
+                  <button
+                    onClick={() => handleQueueClick(track)}
+                    disabled={isRequesting}
+                    title="Pedir canción"
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg font-semibold text-xs transition-all active:scale-95 cursor-pointer ${
+                      isRequesting
+                        ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30'
+                        : 'bg-cyan-500/10 hover:bg-cyan-500 text-cyan-400 hover:text-slate-950 border border-cyan-500/20'
+                    }`}
+                  >
+                    {isRequesting ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" /> En cola
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-3.5 h-3.5" /> Pedir
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

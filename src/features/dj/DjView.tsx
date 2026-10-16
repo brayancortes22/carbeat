@@ -4,10 +4,11 @@ import { QueueVoteList } from './components/QueueVoteList';
 import { NewTrackModal } from './components/NewTrackModal';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Badge } from '../../components/ui/Badge';
+import { TrackCover } from '../../components/ui/TrackCover';
 import { RoomChannel } from '../../core/network/room-channel';
 import { MOCK_CAR_TRACKS } from '../../core/audio/mock-library';
 import { QueueItem, Track } from '../../types/track.types';
-import { ArrowLeft, Sparkles, Radio, Check, Disc, Volume2 } from 'lucide-react';
+import { ArrowLeft, Sparkles, Radio, Check, Volume2, Music } from 'lucide-react';
 
 interface DjViewProps {
   roomId: string;
@@ -29,10 +30,10 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [livePlayback, setLivePlayback] = useState<LivePlaybackState>({
-    currentTrack: null,
+    currentTrack: MOCK_CAR_TRACKS[0], // Mostrar canción activa inicial
     isPlaying: false,
     currentTime: 0,
-    duration: 0,
+    duration: 355,
   });
 
   const channel = useMemo(() => new RoomChannel(roomId), [roomId]);
@@ -89,8 +90,16 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
   }, [channel, djName]);
 
   const handleQueueTrack = (track: Track) => {
+    const newItem: QueueItem = {
+      queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      track,
+      votes: 1,
+      requestedBy: djName,
+      requestedAt: Date.now(),
+    };
+    setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
     channel.send('QUEUE_TRACK', djName, djName, { track, requestedBy: djName });
-    showToast(`"${track.title}" añadida a la cola del carro`);
+    showToast(`"${track.title}" agregada a la cola del carro`);
   };
 
   const handleVote = (queueId: string, delta: number) => {
@@ -99,9 +108,17 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
 
   const handleAddNewTrack = (track: Track) => {
     setCatalog((prev) => [track, ...prev]);
+    const newItem: QueueItem = {
+      queueId: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      track,
+      votes: 1,
+      requestedBy: djName,
+      requestedAt: Date.now(),
+    };
+    setQueue((prev) => [...prev, newItem].sort((a, b) => b.votes - a.votes));
     channel.send('NEW_TRACK_OFFER', djName, djName, { track });
     channel.send('QUEUE_TRACK', djName, djName, { track, requestedBy: djName });
-    showToast(`Canción enviada al carro y puesta en cola`);
+    showToast(`"${track.title}" enviada al carro y puesta en cola`);
   };
 
   const progressPercent = livePlayback.duration > 0
@@ -109,7 +126,7 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
     : 0;
 
   return (
-    <div className="min-h-screen bg-[#08090E] p-3 sm:p-5 flex flex-col justify-between max-w-xl mx-auto pb-6">
+    <div className="min-h-screen bg-[#08090E] p-3 sm:p-5 flex flex-col justify-between max-w-xl mx-auto pb-4">
       {/* Header DJ */}
       <header className="flex items-center justify-between pb-3 border-b border-white/5">
         <button
@@ -126,38 +143,41 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
         </div>
       </header>
 
-      {/* Barra de lo que está sonando en vivo en el Carro */}
-      {livePlayback.currentTrack && (
-        <div className="my-2 p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 flex flex-col gap-1.5 shadow-lg shadow-cyan-950/40">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-lg overflow-hidden bg-slate-800 shrink-0 relative">
-                {livePlayback.currentTrack.coverUrl ? (
-                  <img src={livePlayback.currentTrack.coverUrl} alt="Cover" className="w-full h-full object-cover" />
-                ) : (
-                  <Disc className="w-5 h-5 text-cyan-400 m-2" />
-                )}
-              </div>
-              <div className="min-w-0 text-left">
-                <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                  <Volume2 className="w-3 h-3 animate-bounce" /> Sonando en el Carro
-                </span>
-                <h4 className="text-xs font-bold text-white truncate">{livePlayback.currentTrack.title}</h4>
-                <p className="text-[11px] text-slate-400 truncate">{livePlayback.currentTrack.artist}</p>
-              </div>
+      {/* Tarjeta En Vivo: Sonando en la Pantalla del Carro */}
+      <div className="my-2.5 p-3 rounded-2xl bg-gradient-to-r from-cyan-950/40 to-slate-900/60 border border-cyan-500/30 flex flex-col gap-2 shadow-xl shadow-cyan-950/30">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <TrackCover
+              src={livePlayback.currentTrack?.coverUrl}
+              alt="Car Playing"
+              className="w-11 h-11 rounded-xl shadow-md"
+            />
+            <div className="min-w-0 text-left">
+              <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <Volume2 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" /> Sonando en el Carro
+              </span>
+              <h4 className="text-sm font-bold text-white truncate">
+                {livePlayback.currentTrack?.title || 'En espera de reproducción'}
+              </h4>
+              <p className="text-xs text-slate-400 truncate">
+                {livePlayback.currentTrack?.artist || 'Selecciona o pide una canción'}
+              </p>
             </div>
-            <Badge variant={livePlayback.isPlaying ? 'emerald' : 'slate'} className="text-[9px] shrink-0">
-              {livePlayback.isPlaying ? 'En Vivo' : 'En Pausa'}
-            </Badge>
           </div>
-          <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-cyan-400 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
-          </div>
+          <Badge variant={livePlayback.isPlaying ? 'emerald' : 'slate'} className="text-[9px] shrink-0">
+            {livePlayback.isPlaying ? 'En Vivo' : 'En Pausa'}
+          </Badge>
         </div>
-      )}
+        <div className="h-1.5 w-full bg-slate-800/80 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-cyan-500 to-sky-400 transition-all duration-300"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
 
       {/* Selector de pestañas */}
-      <div className="grid grid-cols-2 gap-2 my-2">
+      <div className="grid grid-cols-2 gap-2 my-1.5">
         <button
           onClick={() => setActiveView('catalog')}
           className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -170,18 +190,20 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
         </button>
         <button
           onClick={() => setActiveView('queue')}
-          className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
             activeView === 'queue'
               ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
               : 'bg-white/[0.03] text-slate-400 hover:text-white border border-white/5'
           }`}
         >
-          Cola de Espera ({queue.length})
+          <Music className="w-3.5 h-3.5" />
+          <span>Cola de Espera</span>
+          <span className="ml-1 px-1.5 py-0.2 rounded-full bg-white/20 text-[10px]">{queue.length}</span>
         </button>
       </div>
 
       {/* Contenido Principal */}
-      <GlassCard className="flex-1 my-1 p-3.5 sm:p-4 overflow-hidden flex flex-col min-h-[320px]">
+      <GlassCard className="flex-1 my-1 p-3.5 sm:p-4 overflow-hidden flex flex-col min-h-[300px]">
         {activeView === 'catalog' ? (
           <CatalogBrowser catalog={catalog} onQueueTrack={handleQueueTrack} />
         ) : (
@@ -189,14 +211,14 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
         )}
       </GlassCard>
 
-      {/* Botón para Aportar Música Nueva con Datos */}
+      {/* Botón Destacado para Buscar Música Online con Datos */}
       <div className="pt-2">
         <button
           onClick={() => setIsModalOpen(true)}
           className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 active:scale-98 transition-all cursor-pointer"
         >
           <Sparkles className="w-4 h-4" />
-          Buscar Música Online (Con Datos)
+          Buscar Música Online (Top & Datos)
         </button>
       </div>
 
