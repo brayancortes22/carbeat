@@ -1,12 +1,17 @@
-export async function GET(request: Request): Promise<Response> {
+export default async function handler(req: any, res: any) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   try {
-    const { searchParams } = new URL(request.url);
-    const query = searchParams.get('q') || '';
+    const query = (req.query?.q as string) || '';
 
     if (!query.trim()) {
-      return Response.json([], {
-        headers: { 'Access-Control-Allow-Origin': '*' },
-      });
+      return res.status(200).json([]);
     }
 
     const ytRes = await fetch('https://music.youtube.com/youtubei/v1/search', {
@@ -32,7 +37,7 @@ export async function GET(request: Request): Promise<Response> {
     });
 
     if (!ytRes.ok) {
-      return Response.json([], { status: ytRes.status });
+      return res.status(ytRes.status).json([]);
     }
 
     const data = (await ytRes.json()) as any;
@@ -72,16 +77,9 @@ export async function GET(request: Request): Promise<Response> {
       }
     }
 
-    return Response.json(songs.slice(0, 20), {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=86400',
-      },
-    });
+    res.setHeader('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=86400');
+    return res.status(200).json(songs.slice(0, 20));
   } catch (err: any) {
-    return Response.json(
-      { error: err.message || 'Error en búsqueda de YouTube Music' },
-      { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } }
-    );
+    return res.status(500).json({ error: err.message || 'Error en búsqueda' });
   }
 }
