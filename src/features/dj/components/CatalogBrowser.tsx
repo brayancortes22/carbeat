@@ -6,10 +6,17 @@ import { TOP_TRENDING_TRACKS } from '../../../core/network/music-search-service'
 
 interface CatalogBrowserProps {
   catalog: Track[];
+  currentTrackId?: string;
+  currentTrackTitle?: string;
   onQueueTrack: (track: Track) => void;
 }
 
-export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueueTrack }) => {
+export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
+  catalog,
+  currentTrackId,
+  currentTrackTitle,
+  onQueueTrack,
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -63,12 +70,45 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueue
     setTimeout(() => setRequestingId(null), 1200);
   };
 
-  // Canciones a mostrar: resultados de búsqueda activa o catálogo/tendencias iniciales
-  const displayTracks: Track[] = searchTerm.trim()
-    ? searchResults
-    : catalog.length > 0
-    ? catalog
-    : TOP_TRENDING_TRACKS;
+  // Canciones a mostrar: resultados de búsqueda o catálogo enriquecido siempre con tendencias
+  const displayTracks = React.useMemo(() => {
+    const isCurrentPlaying = (t: Track) => {
+      if (currentTrackId && t.id === currentTrackId) return true;
+      if (currentTrackTitle && t.title.toLowerCase().trim() === currentTrackTitle.toLowerCase().trim()) return true;
+      return false;
+    };
+
+    if (searchTerm.trim()) {
+      return searchResults.filter((s) => !isCurrentPlaying(s));
+    }
+
+    const seen = new Set<string>();
+    const result: Track[] = [];
+
+    // 1. Agregar temas del catálogo (excluyendo el que suena)
+    catalog.forEach((t) => {
+      if (!isCurrentPlaying(t)) {
+        const key = `${t.title.toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          result.push(t);
+        }
+      }
+    });
+
+    // 2. Complementar SIEMPRE con las tendencias recomendadas del viaje
+    TOP_TRENDING_TRACKS.forEach((t) => {
+      if (!isCurrentPlaying(t)) {
+        const key = `${t.title.toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          result.push(t);
+        }
+      }
+    });
+
+    return result;
+  }, [searchTerm, searchResults, catalog, currentTrackId, currentTrackTitle]);
 
   return (
     <div className="flex flex-col h-full space-y-3">
@@ -92,8 +132,8 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({ catalog, onQueue
         <span>
           {searchTerm.trim()
             ? `Resultados para "${searchTerm}" (${displayTracks.length})`
-            : catalog.length > 0
-            ? `Catálogo de la Sala (${displayTracks.length})`
+            : catalog.length > 1
+            ? `Catálogo del Carro & Recomendadas (${displayTracks.length})`
             : 'Éxitos Recomendados para el Viaje'}
         </span>
         {!searchTerm.trim() && (
