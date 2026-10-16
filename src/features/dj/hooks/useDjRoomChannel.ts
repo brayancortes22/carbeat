@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { RoomChannel, getDefaultWsUrl } from '../../../core/network/room-channel';
 import { QueueItem, Track } from '../../../types/track.types';
 import { StorageService } from '../../../core/storage/storage-service';
+import { apiUrl } from '../../../core/network/api-config';
 
 export interface LivePlaybackState {
   currentTrack: Track | null;
@@ -123,7 +124,7 @@ export function useDjRoomChannel({
 
     const heartbeatInterval = setInterval(() => {
       channel.send('DJ_HEARTBEAT' as any, djName, djName, { djName });
-      fetch('/api/room', {
+      fetch(apiUrl('/api/room'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'DJ_HEARTBEAT', payload: { djName } }),
@@ -135,7 +136,7 @@ export function useDjRoomChannel({
     // NUNCA cerrar por microcortes de red, reintentos o respuestas transitorias
     const roomCheckInterval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/room?roomId=${encodeURIComponent(roomId)}`);
+        const res = await fetch(apiUrl(`/api/room?roomId=${encodeURIComponent(roomId)}`));
         if (res.ok) {
           const data = await res.json();
           if (data.closed === true) {
@@ -158,7 +159,7 @@ export function useDjRoomChannel({
 
   const leaveRoom = useCallback(() => {
     channel.send('ROOM_LEAVE' as any, djName, djName, { djName });
-    fetch('/api/room', {
+    fetch(apiUrl('/api/room'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'ROOM_LEAVE', payload: { djName } }),

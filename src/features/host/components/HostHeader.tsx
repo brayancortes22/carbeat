@@ -65,14 +65,14 @@ export const HostHeader: React.FC<HostHeaderProps> = ({
           <span>Buscar en Web</span>
         </button>
 
-        {/* Cargar USB / Carpeta local */}
-        <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-semibold cursor-pointer transition-all active:scale-95">
+        {/* Cargar Música de la Tablet / Almacenamiento Local */}
+        <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold cursor-pointer transition-all active:scale-95 shadow-sm shadow-cyan-500/10">
           <FolderPlus className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Cargar USB</span>
+          <span>Música Tablet / USB</span>
           <input
             type="file"
             multiple
-            accept="audio/*,.mp3,.flac,.m4a"
+            accept="audio/*,.mp3,.flac,.m4a,.wav,.ogg,.aac"
             onChange={onFolderSelect}
             className="hidden"
           />

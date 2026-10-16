@@ -2,6 +2,8 @@
 // El Host anuncia su presencia periódicamente.
 // Los DJs escuchan y muestran los hosts encontrados.
 
+import { apiUrl } from './api-config';
+
 export interface DiscoveredHost {
   roomId: string;
   roomName: string;
@@ -74,7 +76,7 @@ export function startHostAnnouncer(
 
     // Anunciar por HTTP a Vercel Serverless (100% compatible con nube y celulares)
     try {
-      fetch('/api/room', {
+      fetch(apiUrl('/api/room'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -169,7 +171,7 @@ export function startHostScanner(
   // 1. Consulta periódica vía HTTP Serverless (100% compatible con Vercel)
   const fetchHttpRooms = async () => {
     try {
-      const res = await fetch('/api/room?action=discover');
+      const res = await fetch(apiUrl('/api/room?action=discover'));
       if (res.ok) {
         const rooms = (await res.json()) as any[];
         if (Array.isArray(rooms)) {
