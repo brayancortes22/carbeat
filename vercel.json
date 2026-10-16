@@ -7,11 +7,7 @@
       "destination": "/downloads/:match*"
     },
     {
-      "source": "/api/:match*",
-      "destination": "/api/:match*"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!api/|downloads/).*)",
       "destination": "/index.html"
     }
   ],
