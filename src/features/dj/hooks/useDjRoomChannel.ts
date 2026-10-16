@@ -113,21 +113,21 @@ export function useDjRoomChannel({
     }, 3000);
 
     // Polling de verificación de estado de sala en el servidor
+    // SOLO cerrar la sala si el chofer la cerró explícitamente (data.closed === true)
+    // NUNCA cerrar por microcortes de red, reintentos o respuestas transitorias
     const roomCheckInterval = setInterval(async () => {
       try {
         const res = await fetch(`/api/room?roomId=${encodeURIComponent(roomId)}`);
-        if (res.status === 404) {
-          triggerClose();
-          return;
-        }
-        const data = await res.json();
-        if (data.closed || (data.exists === false && !data.id)) {
-          triggerClose();
+        if (res.ok) {
+          const data = await res.json();
+          if (data.closed === true) {
+            triggerClose();
+          }
         }
       } catch {
-        // noop
+        // Tolerante a microcortes en red móvil / túneles
       }
-    }, 5000);
+    }, 4000);
 
     return () => {
       unsub();
