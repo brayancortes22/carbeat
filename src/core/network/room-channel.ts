@@ -8,6 +8,7 @@ export class RoomChannel {
   private broadcast: BroadcastChannel | null = null;
   private handlers: Set<MessageHandler> = new Set();
   private isConnected = false;
+  private isClosed = false;
 
   constructor(roomId: string, wsUrl?: string) {
     this.roomId = roomId;
@@ -19,10 +20,14 @@ export class RoomChannel {
 
   private initBroadcast(): void {
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      this.broadcast = new BroadcastChannel(`carbeat_room_${this.roomId}`);
-      this.broadcast.onmessage = (event) => {
-        this.dispatch(event.data as RoomMessage);
-      };
+      try {
+        this.broadcast = new BroadcastChannel(`carbeat_room_${this.roomId}`);
+        this.broadcast.onmessage = (event) => {
+          this.dispatch(event.data as RoomMessage);
+        };
+      } catch (err) {
+        console.warn('[RoomChannel] BroadcastChannel init error:', err);
+      }
     }
   }
 
@@ -49,6 +54,8 @@ export class RoomChannel {
   }
 
   public send<T>(type: RoomEventType, senderId: string, senderName: string, payload: T): void {
+    if (this.isClosed) return;
+
     const msg: RoomMessage<T> = {
       type,
       roomId: this.roomId,
@@ -60,12 +67,28 @@ export class RoomChannel {
 
     // Enviar a WebSocket si está activo
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg));
+      try {
+        this.ws.send(JSON.stringify(msg));
+      } catch (err) {
+        console.warn('[RoomChannel] WS send failed:', err);
+      }
     }
 
-    // Difundir en canal local (pestañas locales / offline sandbox)
-    if (this.broadcast) {
-      this.broadcast.postMessage(msg);
+    // Difundir en canal local con protección ante canales cerrados
+    try {
+      if (!this.broadcast) {
+        this.initBroadcast();
+      }
+      this.broadcast?.postMessage(msg);
+    } catch (err) {
+      console.warn('[RoomChannel] Broadcast postMessage recovered:', err);
+      // Reintentar reiniciando el canal
+      try {
+        this.initBroadcast();
+        this.broadcast?.postMessage(msg);
+      } catch {
+        // Ignorar de forma segura sin quebrar React
+      }
     }
   }
 
@@ -75,12 +98,25 @@ export class RoomChannel {
   }
 
   private dispatch(msg: RoomMessage): void {
-    this.handlers.forEach((h) => h(msg));
+    this.handlers.forEach((h) => {
+      try {
+        h(msg);
+      } catch (err) {
+        console.error('[RoomChannel] Error in message handler:', err);
+      }
+    });
   }
 
   public close(): void {
-    if (this.ws) this.ws.close();
-    if (this.broadcast) this.broadcast.close();
+    this.isClosed = true;
+    if (this.ws) {
+      try { this.ws.close(); } catch {}
+      this.ws = null;
+    }
+    if (this.broadcast) {
+      try { this.broadcast.close(); } catch {}
+      this.broadcast = null;
+    }
     this.handlers.clear();
   }
 

@@ -24,6 +24,13 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
 
   const channel = useMemo(() => new RoomChannel(roomId), [roomId]);
+  const catalogRef = React.useRef(catalog);
+  const queueRef = React.useRef(queue);
+  const playerStateRef = React.useRef(playerState);
+
+  catalogRef.current = catalog;
+  queueRef.current = queue;
+  playerStateRef.current = playerState;
 
   // Manejar el avance a la siguiente canción
   const handleNext = useCallback(() => {
@@ -52,6 +59,13 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     }
   }, [catalog, playerState.currentTrack]);
 
+  // Cierre limpio de canal solo al desmontar
+  useEffect(() => {
+    return () => {
+      channel.close();
+    };
+  }, [channel]);
+
   // Escuchar mensajes entrantes de los DJs
   useEffect(() => {
     const unsubChannel = channel.subscribe((msg) => {
@@ -76,19 +90,22 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
         const payload = msg.payload as { track: Track };
         setCatalog((prev) => [payload.track, ...prev]);
       } else if (msg.type === 'ROOM_JOIN') {
-        if (msg.senderName && !connectedDjs.includes(msg.senderName)) {
-          setConnectedDjs((prev) => [...prev, msg.senderName!]);
+        if (msg.senderName) {
+          setConnectedDjs((prev) => (prev.includes(msg.senderName!) ? prev : [...prev, msg.senderName!]));
         }
         // Responder enviando catálogo y cola
-        channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', { catalog, queue, currentTrack: playerState.currentTrack });
+        channel.send('SYNC_CATALOG', 'host', 'Pantalla Carro', {
+          catalog: catalogRef.current,
+          queue: queueRef.current,
+          currentTrack: playerStateRef.current.currentTrack,
+        });
       }
     });
 
     return () => {
       unsubChannel();
-      channel.close();
     };
-  }, [channel, catalog, queue, playerState.currentTrack, connectedDjs]);
+  }, [channel]);
 
   const handleFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {

@@ -30,6 +30,12 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
   };
 
   useEffect(() => {
+    return () => {
+      channel.close();
+    };
+  }, [channel]);
+
+  useEffect(() => {
     // Anunciar entrada a la sala
     channel.send('ROOM_JOIN', djName, djName, { djName });
 
@@ -60,7 +66,6 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, onLeaveRoom }) =
 
     return () => {
       unsub();
-      channel.close();
     };
   }, [channel, djName]);
 
