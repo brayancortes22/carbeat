@@ -27,3 +27,14 @@ export function apiUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   return `${base}${cleanPath}`;
 }
+
+export function getWebOrigin(): string {
+  if (typeof window === 'undefined') return PROD_ORIGIN;
+  const { hostname, port, protocol } = window.location;
+  const isDevVite = (hostname === 'localhost' || hostname === '127.0.0.1') && port === '5173';
+  if (protocol === 'capacitor:' || (!isDevVite && (hostname === 'localhost' || hostname === '127.0.0.1'))) {
+    return PROD_ORIGIN;
+  }
+  return window.location.origin;
+}
+

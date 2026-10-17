@@ -1,5 +1,14 @@
 import { Track, QueueItem } from '../src/types/track.types';
 
+interface RoomEvent {
+  id: string;
+  type: string;
+  senderId?: string;
+  senderName?: string;
+  timestamp: number;
+  payload: any;
+}
+
 interface RoomState {
   roomId: string;
   roomName: string;
@@ -11,6 +20,7 @@ interface RoomState {
   duration: number;
   queue: QueueItem[];
   djs: Record<string, number>; // djName -> lastSeen timestamp
+  pendingEvents: RoomEvent[];
   lastUpdated: number;
 }
 
@@ -28,9 +38,10 @@ export default async function handler(req: any, res: any) {
 
   const action = (req.query?.action as string) || '';
   const now = Date.now();
-  const INACTIVE_TIMEOUT_MS = 6000; // 6 segundos sin latido = sala inactiva
+  const INACTIVE_TIMEOUT_MS = 60000; // 60 segundos tolerante para conexiones celulares
+  const DJ_TIMEOUT_MS = 25000; // 25 segundos para considerar DJ inactivo
 
-  // Limpiar salas inactivas (>6 segundos sin señal del host)
+  // Limpiar salas inactivas (>60 segundos sin señal del host)
   for (const [id, r] of roomsStore.entries()) {
     if (now - r.hostLastSeen > INACTIVE_TIMEOUT_MS) {
       roomsStore.delete(id);
@@ -43,8 +54,7 @@ export default async function handler(req: any, res: any) {
     const activeRooms: any[] = [];
     for (const r of roomsStore.values()) {
       if (now - r.hostLastSeen <= INACTIVE_TIMEOUT_MS) {
-        // Purgar DJs inactivos (más de 6 segundos sin latido)
-        const activeDjs = Object.entries(r.djs).filter(([_, time]) => now - time < 6000);
+        const activeDjs = Object.entries(r.djs).filter(([_, time]) => now - time < DJ_TIMEOUT_MS);
         activeRooms.push({
           roomId: r.roomId,
           roomName: r.roomName || `CarBeat ${r.roomId}`,
@@ -57,13 +67,14 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json(activeRooms);
   }
 
-  // 2. GET: Consulta de estado de sala y verificación de existencia
+  // 2. GET: Consulta de estado de sala y entrega de eventos
   if (req.method === 'GET') {
     const roomId = ((req.query?.roomId as string) || '').toUpperCase().trim();
+    const role = (req.query?.role as string) || 'dj';
+    const since = parseInt((req.query?.since as string) || '0', 10);
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const existing = roomsStore.get(roomId);
 
-    // Si la sala no existe o su host lleva más de 6s desconectado
     if (!existing || now - existing.hostLastSeen > INACTIVE_TIMEOUT_MS) {
       if (existing) roomsStore.delete(roomId);
       return res.status(200).json({
@@ -72,13 +83,24 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // Purgar DJs inactivos
-    const activeDjCount = Object.values(existing.djs).filter((t) => now - t < 6000).length;
+    // Filtrar DJs activos
+    const activeDjEntries = Object.entries(existing.djs).filter(([_, t]) => now - t < DJ_TIMEOUT_MS);
+    const activeDjNames = activeDjEntries.map(([name]) => name);
+
+    // Eventos pendientes para el Host (enviados por los DJs)
+    const eventsForHost = role === 'host'
+      ? (existing.pendingEvents || []).filter((e) => e.timestamp > since)
+      : [];
+
+    // Limpiar eventos con más de 45 segundos
+    existing.pendingEvents = (existing.pendingEvents || []).filter((e) => now - e.timestamp < 45000);
 
     return res.status(200).json({
       exists: true,
       ...existing,
-      djCount: activeDjCount,
+      activeDjs: activeDjNames,
+      djCount: activeDjNames.length,
+      events: eventsForHost,
     });
   }
 
@@ -86,7 +108,7 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'POST') {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-      const { type, payload } = body;
+      const { type, payload, senderId, senderName } = body;
       const targetRoomId = (body.roomId || payload?.roomId || (req.query?.roomId as string) || '').toUpperCase().trim();
 
       if (!targetRoomId) {
@@ -114,6 +136,7 @@ export default async function handler(req: any, res: any) {
             duration: 0,
             queue: [],
             djs: {},
+            pendingEvents: [],
             lastUpdated: Date.now(),
           };
           roomsStore.set(targetRoomId, room);
@@ -126,22 +149,44 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({ ok: true, roomId: targetRoomId });
       }
 
-      // Si la sala no existe en roomsStore, no se pueden enviar mutaciones de DJ
-      const room = roomsStore.get(targetRoomId);
+      // Si la sala no existe en roomsStore, permitir crear sala temporal si es un DJ intentando conectar
+      let room = roomsStore.get(targetRoomId);
       if (!room || now - room.hostLastSeen > INACTIVE_TIMEOUT_MS) {
         if (room) roomsStore.delete(targetRoomId);
         return res.status(404).json({ exists: false, error: `La sala "${targetRoomId}" está inactiva o cerrada.` });
       }
 
+      // Inicializar array de eventos si no existe
+      if (!room.pendingEvents) room.pendingEvents = [];
+
+      // Función auxiliar para registrar evento en tránsito para el Host
+      const enqueueEventForHost = (evtType: string, evtPayload: any) => {
+        room!.pendingEvents.push({
+          id: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          type: evtType,
+          senderId: senderId || 'dj',
+          senderName: senderName || payload?.djName || 'DJ',
+          timestamp: Date.now(),
+          payload: evtPayload,
+        });
+        if (room!.pendingEvents.length > 60) {
+          room!.pendingEvents.shift();
+        }
+      };
+
       // B) Heartbeat de DJ (Pasajero activo)
-      if (type === 'DJ_HEARTBEAT' && payload?.djName) {
-        room.djs[payload.djName] = Date.now();
-        return res.status(200).json({ ok: true });
+      if (type === 'DJ_HEARTBEAT' || type === 'ROOM_JOIN') {
+        const name = payload?.djName || senderName || 'DJ';
+        room.djs[name] = Date.now();
+        enqueueEventForHost(type, { djName: name, ...payload });
+        return res.status(200).json({ ok: true, djCount: Object.keys(room.djs).length });
       }
 
       // C) DJ Abandona la sala
-      if (type === 'ROOM_LEAVE' && payload?.djName) {
-        delete room.djs[payload.djName];
+      if (type === 'ROOM_LEAVE') {
+        const name = payload?.djName || senderName || 'DJ';
+        delete room.djs[name];
+        enqueueEventForHost('ROOM_LEAVE', { djName: name });
         return res.status(200).json({ ok: true });
       }
 
@@ -155,7 +200,7 @@ export default async function handler(req: any, res: any) {
       // D) Pedir canción a la cola (Deduplicación estricta y suma de votos)
       if (type === 'QUEUE_TRACK' && payload?.track) {
         const track: Track = payload.track;
-        const requestedBy: string = payload.requestedBy || 'DJ Pasajero';
+        const requestedBy: string = payload.requestedBy || senderName || 'DJ Pasajero';
 
         // Buscar si ya existe la pista en la cola
         const existingItem = room.queue.find(
@@ -187,6 +232,9 @@ export default async function handler(req: any, res: any) {
 
         room.queue.sort((a, b) => b.votes - a.votes);
         room.lastUpdated = Date.now();
+
+        // Notificar al Host para que incorpore la canción a su reproductor
+        enqueueEventForHost('QUEUE_TRACK', { track, requestedBy, isAutopilot: payload?.isAutopilot });
         return res.status(200).json(room);
       }
 
@@ -200,6 +248,7 @@ export default async function handler(req: any, res: any) {
           )
           .sort((a, b) => b.votes - a.votes);
         room.lastUpdated = Date.now();
+        enqueueEventForHost('VOTE_TRACK', payload);
         return res.status(200).json(room);
       }
 
@@ -211,7 +260,6 @@ export default async function handler(req: any, res: any) {
         if (payload.currentTime !== undefined) room.currentTime = payload.currentTime;
         if (payload.duration !== undefined) room.duration = payload.duration;
         if (Array.isArray(payload.queue)) {
-          // Deduplicar estrictamente la cola recibida del host
           const seen = new Set<string>();
           room.queue = payload.queue
             .filter((item: any) => {
