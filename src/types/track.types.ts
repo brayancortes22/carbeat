@@ -20,4 +20,5 @@ export interface QueueItem {
   requestedBy: string;
   requestedAt: number;
   isAutopilot?: boolean;
+  votedBy?: Record<string, number>; // djName o senderId -> 1 o -1
 }
