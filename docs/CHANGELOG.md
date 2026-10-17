@@ -1,5 +1,16 @@
 # CarBeat — Registro de Versiones y Changelog Oficial
 
+## [v1.5.0] — 2026-10-17
+### 📂 Auto-Detección y Vigilancia Persistente de Carpeta de Música
+1. **Servicio `FolderWatcherService`:**
+   - Permite al chofer vincular su carpeta de música (Tablet o USB).
+   - Utiliza la File System Access API para vigilar la carpeta en segundo plano cada 12 segundos.
+   - Si el chofer descarga más canciones o inserta una USB, la app las detecta, guarda en `LocalAudioDatabase` y las añade al catálogo automáticamente sin intervención.
+2. **Persistencia de Handle en IndexedDB:**
+   - Al reiniciar o abrir la cabina, CarBeat restaura automáticamente la vigilancia de la carpeta previamente vinculada.
+3. **Indicador Visual en Cabina:**
+   - Botón interactivo en la barra superior: muestra el nombre de la carpeta activa con pulso verde esmeralda (`Auto: Música`).
+
 ## [v1.4.0] — 2026-10-17
 ### ⚡ Novedades y Reparación de Búsqueda Online
 1. **Búsqueda en la Nube Reparada (Apartado DJ):**
