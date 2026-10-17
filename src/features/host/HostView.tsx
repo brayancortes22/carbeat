@@ -15,6 +15,7 @@ import { LocalAudioDatabase } from '../../core/audio/local-audio-db';
 import { apiUrl } from '../../core/network/api-config';
 import { startHostAnnouncer, stopHostAnnouncer } from '../../core/network/host-discovery';
 import { StorageService } from '../../core/storage/storage-service';
+import { queueCacher } from '../../core/audio/queue-cacher';
 import { useHostRoomChannel } from './hooks/useHostRoomChannel';
 import { useHostAutopilot } from './hooks/useHostAutopilot';
 
@@ -55,6 +56,13 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
       }
     });
   }, []);
+
+  // Pre-calentar y almacenar en caché en segundo plano la siguiente canción en la cola
+  useEffect(() => {
+    if (queue.length > 0) {
+      queueCacher.preloadNextInQueue(queue);
+    }
+  }, [queue]);
 
   const lastPrevClickRef = useRef<number>(0);
 
@@ -221,13 +229,13 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
         onFolderSelect={handleFolderSelect}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 my-auto py-3">
-        <div className="lg:col-span-3 flex flex-col justify-center">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 lg:gap-4 flex-1 my-auto py-2">
+        <div className="md:col-span-4 lg:col-span-3 flex flex-col justify-center order-2 md:order-1">
           <RoomQrBadge roomId={roomId} connectedCount={connectedDjs.length} />
         </div>
 
-        <div className="lg:col-span-5">
-          <GlassCard glow className="h-full flex items-center justify-center p-6 border-cyan-500/30">
+        <div className="md:col-span-8 lg:col-span-5 order-1 md:order-2">
+          <GlassCard glow className="h-full min-h-[300px] flex items-center justify-center p-3 sm:p-5 border-cyan-500/30">
             <NowPlayingScreen
               track={playerState.currentTrack}
               isPlaying={playerState.isPlaying}
@@ -243,8 +251,8 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
           </GlassCard>
         </div>
 
-        <div className="lg:col-span-4 flex flex-col">
-          <GlassCard className="h-full max-h-[540px] overflow-hidden flex flex-col p-3">
+        <div className="md:col-span-12 lg:col-span-4 flex flex-col order-3">
+          <GlassCard className="h-full min-h-[260px] max-h-[500px] overflow-hidden flex flex-col p-3">
             <HostQueueActions
               queueCount={queue.length}
               isAutopilotActive={isAutopilotActive}

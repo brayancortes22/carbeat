@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Track } from '../../../types/track.types';
-import { Search, Plus, Music, Check, Loader2, Sparkles } from 'lucide-react';
+import { Search, Plus, Music, Check, Loader2 } from 'lucide-react';
 import { TrackCover } from '../../../components/ui/TrackCover';
 import { TOP_TRENDING_TRACKS } from '../../../core/network/music-search-service';
 
@@ -70,6 +70,9 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     setTimeout(() => setRequestingId(null), 1200);
   };
 
+  const [dataRoute, setDataRoute] = useState<'car' | 'phone'>('car');
+  const [filterSource, setFilterSource] = useState<'all' | 'local_car' | 'trending'>('all');
+
   // Canciones a mostrar: resultados de búsqueda o catálogo enriquecido siempre con tendencias
   const displayTracks = React.useMemo(() => {
     const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -93,29 +96,33 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     const result: Track[] = [];
 
     // 1. Agregar temas del catálogo del carro (excluyendo el que suena)
-    catalog.forEach((t) => {
-      if (!isCurrentPlaying(t)) {
-        const key = `${norm(t.title)}_${norm(t.artist)}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          result.push(t);
+    if (filterSource === 'all' || filterSource === 'local_car') {
+      catalog.forEach((t) => {
+        if (!isCurrentPlaying(t)) {
+          const key = `${norm(t.title)}_${norm(t.artist)}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            result.push(t);
+          }
         }
-      }
-    });
+      });
+    }
 
-    // 2. Complementar SIEMPRE con las tendencias recomendadas del viaje
-    TOP_TRENDING_TRACKS.forEach((t) => {
-      if (!isCurrentPlaying(t)) {
-        const key = `${norm(t.title)}_${norm(t.artist)}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          result.push(t);
+    // 2. Complementar con las tendencias recomendadas del viaje
+    if (filterSource === 'all' || filterSource === 'trending') {
+      TOP_TRENDING_TRACKS.forEach((t) => {
+        if (!isCurrentPlaying(t)) {
+          const key = `${norm(t.title)}_${norm(t.artist)}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            result.push(t);
+          }
         }
-      }
-    });
+      });
+    }
 
     return result;
-  }, [searchTerm, searchResults, catalog, currentTrackId, currentTrackTitle]);
+  }, [searchTerm, searchResults, catalog, currentTrackId, currentTrackTitle, filterSource]);
 
   return (
     <div className="flex flex-col h-full space-y-3">
@@ -134,20 +141,46 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
         )}
       </div>
 
-      {/* Título de la sección */}
-      <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-        <span>
-          {searchTerm.trim()
-            ? `Resultados para "${searchTerm}" (${displayTracks.length})`
-            : catalog.length > 1
-            ? `Catálogo del Carro & Recomendadas (${displayTracks.length})`
-            : 'Éxitos Recomendados para el Viaje'}
-        </span>
-        {!searchTerm.trim() && (
-          <span className="flex items-center gap-1 text-[11px] text-cyan-400">
-            <Sparkles className="w-3 h-3" /> Tendencias
+      {/* Selector de Origen de Datos y Filtro de Carpetas */}
+      <div className="flex items-center justify-between gap-2 text-xs flex-wrap">
+        <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-lg border border-white/5">
+          <button
+            onClick={() => setFilterSource('all')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+              filterSource === 'all' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Todo
+          </button>
+          <button
+            onClick={() => setFilterSource('local_car')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+              filterSource === 'local_car' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Carro Local
+          </button>
+          <button
+            onClick={() => setFilterSource('trending')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+              filterSource === 'trending' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Tendencias
+          </button>
+        </div>
+
+        {/* Indicador de Red de Descarga */}
+        <button
+          onClick={() => setDataRoute((prev) => (prev === 'car' ? 'phone' : 'car'))}
+          title="Toca para alternar si se descarga con datos del Carro o del Celular"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/10 hover:border-cyan-500/40 text-[11px] text-slate-300 cursor-pointer"
+        >
+          <span className="text-slate-500">Datos:</span>
+          <span className="font-bold text-cyan-400">
+            {dataRoute === 'car' ? '🚗 Pantalla Carro' : '📱 Celular Pasajero'}
           </span>
-        )}
+        </button>
       </div>
 
       {/* Lista de Canciones con Deduplicación */}

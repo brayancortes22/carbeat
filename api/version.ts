@@ -5,14 +5,15 @@ export default async function handler(_req: any, res: any) {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
   return res.status(200).json({
-    version: '1.2.1',
+    version: '1.3.0',
     buildDate: '2026-10-16',
     latestApk: '/downloads/carbeat-latest.apk',
     features: [
-      'Conexión Ultra Rápida con caché L1 en caliente (<50ms)',
-      'Sondeo acelerado en cabina (700ms) con sincronización reactiva',
-      'Auto-actualizador autónomo con modal de instalación rápida',
-      'Autopilot DJ con IA y Cola compartida en vivo',
+      'Blindaje Estricto de Votación: 1 solo voto por DJ/Dispositivo por canción',
+      'Pre-Caché en Cola en Segundo Plano (cero congelamientos al pasar a streaming)',
+      'Separación clara de Carpetas: Música Local del Carro vs Aportadas por Pasajeros',
+      'Selector de Origen de Datos: Pantalla del Carro vs Celular del Pasajero',
+      'Interfaz 100% Responsiva adaptada a pantallas de carro (1024x600) y móviles',
     ],
   });
 }
