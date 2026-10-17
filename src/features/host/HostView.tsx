@@ -47,6 +47,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     const current = globalAudioEngine.getState().currentTrack;
     if (current) {
       historyRef.current.push(current);
+      StorageService.addToPlaybackHistory(current);
       if (historyRef.current.length > 50) historyRef.current.shift();
     }
     const currentQueue = queueRef.current;
@@ -55,10 +56,13 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
       const nextItem = currentQueue[0];
       setQueue((prev) => prev.slice(1));
       globalAudioEngine.loadTrack(nextItem.track, true);
+      StorageService.addToPlaybackHistory(nextItem.track);
     } else if (currentCatalog.length > 0) {
       const currentIdx = current ? currentCatalog.findIndex((t) => t.id === current.id) : -1;
       const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % currentCatalog.length : 0;
-      globalAudioEngine.loadTrack(currentCatalog[nextIdx], true);
+      const nextTrack = currentCatalog[nextIdx];
+      globalAudioEngine.loadTrack(nextTrack, true);
+      StorageService.addToPlaybackHistory(nextTrack);
     }
   }, []);
 
@@ -220,10 +224,12 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     const current = globalAudioEngine.getState().currentTrack;
     if (current && current.id !== track.id) {
       historyRef.current.push(current);
+      StorageService.addToPlaybackHistory(current);
     }
     const newCatalog = StorageService.deduplicateTracks([track, ...catalogRef.current]);
     setCatalog(newCatalog);
     globalAudioEngine.loadTrack(track, true);
+    StorageService.addToPlaybackHistory(track);
   };
 
   const handleAddToQueueFromDriver = (track: Track) => {
