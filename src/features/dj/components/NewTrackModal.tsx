@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Sparkles, Play, Pause, Flame, Loader2, CheckCircle2, Car, Radio } from 'lucide-react';
+import { X, Search, Sparkles, Play, Pause, Flame, Loader2, CheckCircle2, Car, Radio, Smartphone } from 'lucide-react';
 import { Track } from '../../../types/track.types';
 import { MusicSearchService, TOP_TRENDING_TRACKS } from '../../../core/network/music-search-service';
 import { MusicSourceType } from '../../../core/providers/omni-music-gateway';
@@ -34,6 +34,34 @@ export const NewTrackModal: React.FC<NewTrackModalProps> = ({
     }
   }, [isOpen, djName]);
 
+  const handleLocalFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/^\d+[\s.-]+/, '');
+      const parts = cleanName.split(' - ');
+      const artist = parts.length > 1 ? parts[0].trim() : `Móvil de ${djName}`;
+      const title = parts.length > 1 ? parts.slice(1).join(' - ').trim() : cleanName.trim();
+
+      const blobUrl = URL.createObjectURL(file);
+      const localTrack: Track = {
+        id: `phone_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        title,
+        artist,
+        album: 'Música en Celular',
+        duration: 210,
+        source: 'passenger_dj',
+        addedBy: djName,
+        audioUrl: blobUrl,
+      };
+
+      onAddTrack(localTrack);
+    }
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const handleSearch = async (e?: React.FormEvent, selectedSource = source) => {
@@ -58,25 +86,16 @@ export const NewTrackModal: React.FC<NewTrackModalProps> = ({
   const handleSendToCar = async (track: Track) => {
     audioPreview.pause();
     setSendingId(track.id);
-
-    // Animación precisa de 4 pasos de transferencia en tiempo real
-    setSendStep('resolving');
-    await new Promise((r) => setTimeout(r, 450));
-
-    setSendStep('downloading');
-    await new Promise((r) => setTimeout(r, 550));
-
-    setSendStep('sending');
-    await new Promise((r) => setTimeout(r, 500));
-
     setSendStep('done');
+
+    // Enviar de inmediato a la cola del host sin retardos artificiales
     onAddTrack(track);
 
     setTimeout(() => {
       setSendingId(null);
       setSendStep(null);
       onClose();
-    }, 650);
+    }, 400);
   };
 
   return (
@@ -98,28 +117,43 @@ export const NewTrackModal: React.FC<NewTrackModalProps> = ({
           </button>
         </div>
 
-        {/* Selector de Fuente OmniRoute */}
-        <div className="flex gap-1.5 my-2.5 overflow-x-auto pb-1 text-[11px]">
-          {[
-            { id: 'all', label: '⚡ Todas (OmniRoute)' },
-            { id: 'youtube', label: '▶ YouTube Music' },
-            { id: 'apple', label: '🎵 Apple / Spotify' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setSource(tab.id as MusicSourceType);
-                handleSearch(undefined, tab.id as MusicSourceType);
-              }}
-              className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap cursor-pointer transition-all ${
-                source === tab.id
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-white'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Selector de Fuente OmniRoute y Botón de Subir Archivo Local */}
+        <div className="flex items-center justify-between gap-1.5 my-2.5 overflow-x-auto pb-1 text-[11px]">
+          <div className="flex gap-1.5">
+            {[
+              { id: 'all', label: '⚡ Todas (OmniRoute)' },
+              { id: 'youtube', label: '▶ YouTube Music' },
+              { id: 'apple', label: '🎵 Apple / Spotify' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setSource(tab.id as MusicSourceType);
+                  handleSearch(undefined, tab.id as MusicSourceType);
+                }}
+                className={`px-2.5 py-1 rounded-lg font-medium whitespace-nowrap cursor-pointer transition-all ${
+                  source === tab.id
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Botón para enviar música descargada en el celular */}
+          <label className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold cursor-pointer whitespace-nowrap active:scale-95 transition-all shrink-0">
+            <Smartphone className="w-3.5 h-3.5" />
+            <span>Mi Celular (Offline)</span>
+            <input
+              type="file"
+              multiple
+              accept="audio/*,.mp3,.m4a,.flac,.wav"
+              onChange={handleLocalFileSelect}
+              className="hidden"
+            />
+          </label>
         </div>
 
         {/* Formulario de Búsqueda */}

@@ -1,5 +1,18 @@
 # CarBeat — Registro de Versiones y Changelog Oficial
 
+## [v1.4.0] — 2026-10-17
+### ⚡ Novedades y Reparación de Búsqueda Online
+1. **Búsqueda en la Nube Reparada (Apartado DJ):**
+   - Resuelto el fallo donde el buscador del DJ intentaba consultar rutas relativas inexistentes en el WebView móvil.
+   - Integrado `apiUrl('/api/yt/search')` con fallback automático a la red distribuida de `OmniMusicGateway` (YouTube Music, Apple, Audius).
+   - Búsqueda instantánea con debounce de 350ms, deduplicación de pistas y botón para limpiar texto en un toque (`X`).
+2. **Envío Instantáneo de Canciones al Carro:**
+   - Eliminados los retrasos de espera artificiales de animación (`setTimeout` de 2 segundos) en el modal de DJs.
+   - El envío ahora es inmediato (<50ms) usando el canal P2P y HTTP Serverless en paralelo.
+3. **Música Local del Celular a la Pantalla del Carro:**
+   - Se añadió el selector **"Mi Celular (Offline)"** en el modal de nueva pista.
+   - Permite al copiloto o pasajeros seleccionar cualquier archivo de audio (`.mp3`, `.m4a`, `.flac`) almacenado en su teléfono y enviarlo directamente a la cola de la cabina.
+
 ## [v1.3.0] — 2026-10-16
 ### 🛡️ Novedades, Blindaje y Optimizaciones
 1. **Blindaje de Votación 1-Voto por DJ/Dispositivo:**

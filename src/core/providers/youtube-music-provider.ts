@@ -1,4 +1,5 @@
 import { Track } from '../../types/track.types';
+import { apiUrl } from '../network/api-config';
 
 interface InvidiousSearchResult {
   type: string;
@@ -22,9 +23,9 @@ export class YouTubeMusicProvider {
     const cleanQuery = query.trim();
     if (!cleanQuery) return [];
 
-    // 1. Intentar primero con el endpoint nativo de Innertube en el backend/Vite
+    // 1. Intentar primero con el endpoint nativo de Innertube en Vercel o Vite (usando apiUrl)
     try {
-      const localRes = await fetch(`/api/yt/search?q=${encodeURIComponent(cleanQuery)}`);
+      const localRes = await fetch(apiUrl(`/api/yt/search?q=${encodeURIComponent(cleanQuery)}`));
       if (localRes.ok) {
         const localSongs = (await localRes.json()) as Track[];
         if (Array.isArray(localSongs) && localSongs.length > 0) {
@@ -32,7 +33,7 @@ export class YouTubeMusicProvider {
         }
       }
     } catch {
-      // Si el proxy local no responde, continuar al fallback en la nube
+      // Si el proxy no responde, continuar al fallback en la nube
     }
 
     // 2. Fallback a nodos públicos de Invidious / Piped

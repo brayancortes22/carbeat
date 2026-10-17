@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Track } from '../../../types/track.types';
-import { Search, Plus, Music, Check, Loader2 } from 'lucide-react';
+import { Search, Plus, Music, Check, Loader2, X } from 'lucide-react';
 import { TrackCover } from '../../../components/ui/TrackCover';
-import { TOP_TRENDING_TRACKS } from '../../../core/network/music-search-service';
+import { TOP_TRENDING_TRACKS, MusicSearchService } from '../../../core/network/music-search-service';
+import { apiUrl } from '../../../core/network/api-config';
 
 interface CatalogBrowserProps {
   catalog: Track[];
@@ -23,7 +24,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
   const [requestingId, setRequestingId] = useState<string | null>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Búsqueda en vivo con debounce de 350ms
+  // Búsqueda en vivo con debounce de 350ms en la nube (YouTube + OmniRoute)
   useEffect(() => {
     const query = searchTerm.trim();
     if (!query) {
@@ -37,11 +38,11 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     setIsSearching(true);
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/yt/search?q=${encodeURIComponent(query)}`);
+        // 1. Intentar primero con el endpoint nativo de Vercel/Vite usando apiUrl
+        const res = await fetch(apiUrl(`/api/yt/search?q=${encodeURIComponent(query)}`));
         if (res.ok) {
           const songs = (await res.json()) as Track[];
-          if (Array.isArray(songs)) {
-            // Deduplicar estrictamente por título + artista
+          if (Array.isArray(songs) && songs.length > 0) {
             const seen = new Set<string>();
             const deduplicated = songs.filter((s) => {
               const key = `${s.title.toLowerCase().trim()}_${s.artist.toLowerCase().trim()}`;
@@ -50,10 +51,21 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
               return true;
             });
             setSearchResults(deduplicated);
+            return;
           }
         }
+
+        // 2. Fallback robusto con OmniMusicGateway en caso de que el backend falle
+        const fallbackSongs = await MusicSearchService.searchOnline(query, 'DJ Móvil');
+        setSearchResults(fallbackSongs);
       } catch (err) {
-        console.warn('[CatalogBrowser] Error en búsqueda en vivo:', err);
+        console.warn('[CatalogBrowser] Error en búsqueda en vivo, usando fallback:', err);
+        try {
+          const fallbackSongs = await MusicSearchService.searchOnline(query, 'DJ Móvil');
+          setSearchResults(fallbackSongs);
+        } catch {
+          setSearchResults([]);
+        }
       } finally {
         setIsSearching(false);
       }
@@ -126,16 +138,29 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
 
   return (
     <div className="flex flex-col h-full space-y-3">
-      {/* Buscador Universal en Vivo */}
+      {/* Buscador Universal en Vivo Móvil */}
       <div className="relative">
         <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
         <input
-          type="text"
+          type="search"
+          enterKeyHint="search"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck="false"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Buscar cualquier canción o artista en YouTube..."
-          className="w-full bg-slate-900/80 border border-slate-700/60 rounded-xl pl-10 pr-10 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/80 transition-colors"
+          className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-cyan-400 transition-colors shadow-inner"
         />
+        {searchTerm.trim() && !isSearching && (
+          <button
+            type="button"
+            onClick={() => setSearchTerm('')}
+            className="absolute right-3.5 top-2.5 p-0.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
         {isSearching && (
           <Loader2 className="absolute right-3.5 top-3 w-4 h-4 text-cyan-400 animate-spin" />
         )}
