@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Badge } from '../../../components/ui/Badge';
 import { Users, Wifi } from 'lucide-react';
+import { getWebOrigin } from '../../../core/network/api-config';
 
 interface RoomQrBadgeProps {
   roomId: string;
@@ -17,9 +18,10 @@ export const RoomQrBadge: React.FC<RoomQrBadgeProps> = ({ roomId, connectedCount
     let isMounted = true;
 
     async function generateQr() {
-      let baseUrl = window.location.origin;
+      let baseUrl = getWebOrigin();
       try {
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        const isLocalVite = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port === '5173';
+        if (isLocalVite) {
           const res = await fetch('/api/server-info');
           if (res.ok) {
             const data = await res.json();
@@ -29,7 +31,7 @@ export const RoomQrBadge: React.FC<RoomQrBadgeProps> = ({ roomId, connectedCount
           }
         }
       } catch {
-        // Fallback a window.location.origin
+        // Fallback a getWebOrigin()
       }
 
       const roomUrl = `${baseUrl}/?room=${encodeURIComponent(roomId)}`;

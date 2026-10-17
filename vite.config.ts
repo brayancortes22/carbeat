@@ -43,7 +43,8 @@ function websocketRoomsPlugin(): Plugin {
         const roomId = (urlObj.searchParams.get('roomId') || 'DEFAULT').toUpperCase();
 
         const now = Date.now();
-        const INACTIVE_TIMEOUT_MS = 10000;
+        const INACTIVE_TIMEOUT_MS = 60000;
+        const DJ_TIMEOUT_MS = 25000;
 
         // Purgar periódicamente salas inactivas
         for (const [id, r] of localRooms.entries()) {
@@ -57,7 +58,7 @@ function websocketRoomsPlugin(): Plugin {
             const list: any[] = [];
             for (const r of localRooms.values()) {
               if (now - (r.lastUpdated || 0) <= INACTIVE_TIMEOUT_MS) {
-                const activeDjs = Object.entries(r.djs || {}).filter(([_, time]: any) => now - time < 6000);
+                const activeDjs = Object.entries(r.djs || {}).filter(([_, time]: any) => now - time < DJ_TIMEOUT_MS);
                 list.push({
                   roomId: r.roomId,
                   roomName: r.roomName || `CarBeat ${r.roomId}`,
@@ -81,11 +82,23 @@ function websocketRoomsPlugin(): Plugin {
             return;
           }
 
-          const activeDjCount = Object.values(existing.djs || {}).filter((t: any) => now - t < 6000).length;
+          const activeDjEntries = Object.entries(existing.djs || {}).filter(([_, t]: any) => now - t < DJ_TIMEOUT_MS);
+          const activeDjNames = activeDjEntries.map(([name]) => name);
+
+          const role = urlObj.searchParams.get('role') || 'dj';
+          const since = parseInt(urlObj.searchParams.get('since') || '0', 10);
+          const eventsForHost = role === 'host'
+            ? (existing.pendingEvents || []).filter((e: any) => e.timestamp > since)
+            : [];
+
+          existing.pendingEvents = (existing.pendingEvents || []).filter((e: any) => now - e.timestamp < 45000);
+
           res.end(JSON.stringify({
             exists: true,
             ...existing,
-            djCount: activeDjCount,
+            activeDjs: activeDjNames,
+            djCount: activeDjNames.length,
+            events: eventsForHost,
           }));
           return;
         }
@@ -112,15 +125,35 @@ function websocketRoomsPlugin(): Plugin {
                 isPlaying: false,
                 currentTime: 0,
                 duration: 0,
-                djs: {}
+                djs: {},
+                pendingEvents: [],
+              };
+              if (!existing.pendingEvents) existing.pendingEvents = [];
+
+              const enqueueEvent = (evtType: string, evtPayload: any) => {
+                existing.pendingEvents.push({
+                  id: `evt_${Date.now()}`,
+                  type: evtType,
+                  senderId: data.senderId || 'dj',
+                  senderName: data.senderName || 'DJ',
+                  timestamp: Date.now(),
+                  payload: evtPayload,
+                });
+                if (existing.pendingEvents.length > 60) existing.pendingEvents.shift();
               };
 
               if (data.type === 'HOST_ANNOUNCE') {
                 existing.roomName = data.payload?.roomName || existing.roomName;
                 existing.lastUpdated = Date.now();
-              } else if (data.type === 'DJ_HEARTBEAT') {
+              } else if (data.type === 'DJ_HEARTBEAT' || data.type === 'ROOM_JOIN') {
                 existing.djs = existing.djs || {};
-                if (data.payload?.djName) existing.djs[data.payload.djName] = Date.now();
+                const name = data.payload?.djName || data.senderName || 'DJ';
+                existing.djs[name] = Date.now();
+                enqueueEvent(data.type, { djName: name, ...data.payload });
+              } else if (data.type === 'ROOM_LEAVE') {
+                const name = data.payload?.djName || data.senderName || 'DJ';
+                if (existing.djs) delete existing.djs[name];
+                enqueueEvent('ROOM_LEAVE', { djName: name });
               } else if (data.type === 'SYNC_CATALOG') {
                 if (data.payload?.queue) existing.queue = data.payload.queue;
                 if (data.payload?.catalog) existing.catalog = data.payload.catalog;
@@ -142,9 +175,20 @@ function websocketRoomsPlugin(): Plugin {
                     queueId: `q_${Date.now()}`,
                     track: data.payload.track,
                     votes: 1,
-                    requestedBy: data.payload.requestedBy || 'DJ',
+                    requestedBy: data.payload.requestedBy || data.senderName || 'DJ',
                     requestedAt: Date.now()
                   });
+                  enqueueEvent('QUEUE_TRACK', data.payload);
+                }
+                existing.lastUpdated = Date.now();
+              } else if (data.type === 'VOTE_TRACK') {
+                if (data.payload?.queueId) {
+                  existing.queue = (existing.queue || []).map((item: any) =>
+                    item.queueId === data.payload.queueId
+                      ? { ...item, votes: Math.max(0, item.votes + (data.payload.delta || 1)) }
+                      : item
+                  ).sort((a: any, b: any) => b.votes - a.votes);
+                  enqueueEvent('VOTE_TRACK', data.payload);
                 }
                 existing.lastUpdated = Date.now();
               }

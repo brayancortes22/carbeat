@@ -52,14 +52,14 @@ export const LandingView: React.FC<LandingViewProps> = ({
       const res = await fetch(apiUrl(`/api/room?roomId=${encodeURIComponent(code)}`));
       if (res.ok) {
         const data = await res.json();
-        if (data && data.exists === false) {
-          setRoomError(data.error || `No se encontró la sala "${code}". Verifica el código en la pantalla del carro.`);
+        if (data && data.closed === true) {
+          setRoomError(data.error || `La sala "${code}" fue cerrada por el conductor.`);
           setIsCheckingRoom(false);
           return;
         }
       }
     } catch {
-      // Ignorar error de red si no hay internet (permite fallback offline si aplica)
+      // Ignorar error de red si no hay internet (permite fallback offline P2P)
     } finally {
       setIsCheckingRoom(false);
     }

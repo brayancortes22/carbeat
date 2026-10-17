@@ -41,7 +41,7 @@ export class RoomChannel {
     this.roomId = roomId;
     this.initBroadcast();
     this.initPeerChannel(isHost);
-    this.initHttpRelay();
+    this.initHttpRelay(isHost);
     if (wsUrl) {
       this.initWebSocket(wsUrl);
     }
@@ -79,13 +79,16 @@ export class RoomChannel {
 
   private isOnline = false;
 
-  private initHttpRelay(): void {
+  private initHttpRelay(isHost: boolean): void {
     if (typeof window === 'undefined') return;
+
+    let lastSince = Date.now() - 5000;
 
     const poll = async () => {
       if (this.isClosed) return;
       try {
-        const res = await fetch(apiUrl(`/api/room?roomId=${encodeURIComponent(this.roomId)}`));
+        const queryRole = isHost ? `&role=host&since=${lastSince}` : '&role=dj';
+        const res = await fetch(apiUrl(`/api/room?roomId=${encodeURIComponent(this.roomId)}${queryRole}`));
         if (res.ok) {
           this.isOnline = true;
           this.dispatch({
@@ -97,22 +100,54 @@ export class RoomChannel {
             payload: { connected: true }
           });
           const room = await res.json();
-          if (room && room.lastUpdated) {
-            this.handleIncoming({
-              type: 'SYNC_CATALOG',
-              roomId: this.roomId,
-              senderId: 'serverless_relay',
-              senderName: 'Vercel Relay',
-              timestamp: room.lastUpdated,
-              payload: {
-                catalog: room.queue ? room.queue.map((q: any) => q.track) : [],
-                queue: room.queue || [],
-                currentTrack: room.currentTrack,
-                isPlaying: room.isPlaying,
-                currentTime: room.currentTime,
-                duration: room.duration,
-              },
-            });
+          if (room && room.exists !== false) {
+            // 1. Entregar eventos pendientes en cola (peticiones de canciones, votos, etc.)
+            if (isHost && Array.isArray(room.events)) {
+              for (const evt of room.events) {
+                if (evt.timestamp > lastSince) {
+                  lastSince = Math.max(lastSince, evt.timestamp);
+                  this.handleIncoming({
+                    type: evt.type,
+                    roomId: this.roomId,
+                    senderId: evt.senderId || 'dj',
+                    senderName: evt.senderName || 'DJ',
+                    timestamp: evt.timestamp,
+                    payload: evt.payload,
+                  });
+                }
+              }
+            }
+
+            // 2. Notificar actualización de DJs conectados
+            if (Array.isArray(room.activeDjs)) {
+              this.dispatch({
+                type: 'ACTIVE_DJS_UPDATE' as any,
+                roomId: this.roomId,
+                senderId: 'serverless_relay',
+                senderName: 'Vercel Relay',
+                timestamp: Date.now(),
+                payload: { djs: room.activeDjs, count: room.djCount ?? room.activeDjs.length }
+              });
+            }
+
+            // 3. Sincronizar catálogo y estado con los DJs
+            if (!isHost && room.lastUpdated) {
+              this.handleIncoming({
+                type: 'SYNC_CATALOG',
+                roomId: this.roomId,
+                senderId: 'serverless_relay',
+                senderName: 'Vercel Relay',
+                timestamp: room.lastUpdated,
+                payload: {
+                  catalog: room.queue ? room.queue.map((q: any) => q.track) : [],
+                  queue: room.queue || [],
+                  currentTrack: room.currentTrack,
+                  isPlaying: room.isPlaying,
+                  currentTime: room.currentTime,
+                  duration: room.duration,
+                },
+              });
+            }
           }
         }
       } catch {
@@ -120,7 +155,7 @@ export class RoomChannel {
       }
     };
 
-    this.httpPollInterval = setInterval(poll, 1500);
+    this.httpPollInterval = setInterval(poll, isHost ? 1200 : 1500);
     setTimeout(poll, 100);
   }
 
@@ -223,7 +258,13 @@ export class RoomChannel {
       fetch(apiUrl(`/api/room?roomId=${encodeURIComponent(this.roomId)}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, payload }),
+        body: JSON.stringify({
+          type,
+          roomId: this.roomId,
+          senderId,
+          senderName,
+          payload,
+        }),
       }).catch(() => {});
     } catch {
       /* ignore */
