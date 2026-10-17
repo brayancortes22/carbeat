@@ -100,11 +100,27 @@ El APK generado se ubica en: `public/downloads/carbeat-latest.apk`.
 
 ---
 
-## 🌿 Estrategia de Ramas Git (Regla de Oro GEMINI.md)
-1. `development`: Desarrollo activo, refactorizaciones e integración continua.
-2. `qa`: Aseguramiento de calidad, staging y validación previa a producción.
-3. `main`: Producción oficial y estable con despliegue automático a Vercel y descarga del APK.
+## 🚀 Pipeline CI/CD Autónomo & Bypass de Vercel Hobby (Regla 17)
+
+CarBeat implementa una arquitectura de integración y despliegue continuo autónomo en GitHub Actions para colaborar sin fricciones ni sobrecostes de proveedor:
+
+1. **Auto-Aprobación y Fusión de PRs (`auto-approve-merge.yml`):**
+   - Cuando colaboradores autorizados (ej. `vars.AUTO_MERGE_SOURCE_USER`) o PRs con la etiqueta `automerge` envían cambios, el sistema ejecuta validaciones de compilación (`npm run build`).
+   - Si las pruebas pasan, el PR es auto-aprobado a nombre de Brayan usando un Personal Access Token (`PR_AUTOMATION_TOKEN`) y se fusiona automáticamente.
+2. **Despliegue Directo vía Vercel CLI (`deploy-vercel.yml`):**
+   - Al integrarse en `main`, GitHub Actions compila los artefactos y realiza el despliegue a producción mediante `vercel deploy --prebuilt --prod` usando las credenciales del titular (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`).
+   - Esto evita los bloqueos de cuentas Hobby de Vercel cuando los commits provienen de múltiples colaboradores.
+
+### 🔑 Variables y Secretos Requeridos en GitHub (Settings > Secrets and variables > Actions):
+* **Secrets:**
+  - `PR_AUTOMATION_TOKEN`: Personal Access Token (classic) con scope `repo` para autorizar y fusionar PRs.
+  - `VERCEL_TOKEN`: Token de acceso generado en la cuenta de Vercel de Brayan.
+  - `VERCEL_ORG_ID`: ID del equipo/cuenta en Vercel.
+  - `VERCEL_PROJECT_ID`: ID del proyecto CarBeat en Vercel.
+* **Variables:**
+  - `AUTO_MERGE_SOURCE_USER`: Usuario de GitHub del colaborador autorizado (ej. Diego) para habilitar auto-merge automático.
 
 ---
 
 Desarrollado con pasión por **Brayan Stid Cortés Lombana (`bscl`)**.
+

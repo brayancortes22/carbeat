@@ -10,9 +10,19 @@ on:
     branches:
       - main
       - qa
+      - development
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-vercel-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
+    name: Build & Quality Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -27,15 +37,16 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Typecheck and Build
+      - name: Typecheck and Build Web Client
         run: npm run build
 
-      - name: Verify Relay Server
+      - name: Verify Relay Server Syntax
         run: node --check server/relay-server.mjs
 
   deploy-to-vercel:
+    name: Production Deploy via Vercel CLI
     needs: build-and-test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -46,25 +57,41 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
-
-      - name: Pull Vercel Environment Information
-        if: env.VERCEL_TOKEN != ''
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Check Vercel CLI Secrets
+        id: vercel_config
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning ::Despliegue CLI omitido: Se requieren los secretos VERCEL_TOKEN, VERCEL_ORG_ID y VERCEL_PROJECT_ID en el repositorio." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Install Vercel CLI
+        if: steps.vercel_config.outputs.configured == 'true'
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel Environment Information
+        if: steps.vercel_config.outputs.configured == 'true'
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Build Project Artifacts
-        if: env.VERCEL_TOKEN != ''
+        if: steps.vercel_config.outputs.configured == 'true'
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Deploy Project Artifacts to Vercel
-        if: env.VERCEL_TOKEN != ''
+        if: steps.vercel_config.outputs.configured == 'true'
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
