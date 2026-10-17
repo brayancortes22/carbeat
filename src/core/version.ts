@@ -1,6 +1,4 @@
-// Fuente única de verdad para la versión de CarBeat
-// Cambia este valor en cada release para que se refleje en toda la app
-export const CARBEAT_VERSION = '1.2.0';
+export const CARBEAT_VERSION = '1.3.0';
 export const CARBEAT_BUILD_DATE = '2026-10-16';
 export const CARBEAT_RELEASE_NOTES =
-  'Doble Flujo Chofer/Pasajeros + Cierre de Sala y Expulsión + Biblioteca del Chofer + Autopilot IA + Auto-Actualización Dinámica';
+  'Blindaje de Votación 1-Voto por DJ + Pre-Caché en Cola Anti-Congelamiento + Filtros de Carpetas Carro/Pasajeros + UI Responsiva de Cabina';

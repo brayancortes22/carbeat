@@ -291,15 +291,44 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json(room);
       }
 
-      // E) Votación de canciones
+      // E) Votación de canciones con restricción estricta (1 voto por DJ/Dispositivo)
       if (type === 'VOTE_TRACK' && payload?.queueId) {
+        const voterKey = (payload?.voterId || senderName || payload?.djName || senderId || 'dj').trim().toLowerCase();
+        const requestedDelta = payload.delta > 0 ? 1 : -1;
+
         room.queue = room.queue
-          .map((item) =>
-            item.queueId === payload.queueId
-              ? { ...item, votes: Math.max(0, item.votes + (payload.delta || 1)) }
-              : item
-          )
+          .map((item) => {
+            if (item.queueId !== payload.queueId) return item;
+
+            const currentVotedBy = { ...(item.votedBy || {}) };
+            const previousVote = currentVotedBy[voterKey] || 0;
+
+            let newVoteVal = requestedDelta;
+            let voteDelta = requestedDelta;
+
+            // Si ya votó exactamente lo mismo, toggle (quitar el voto)
+            if (previousVote === requestedDelta) {
+              delete currentVotedBy[voterKey];
+              voteDelta = -requestedDelta;
+            } else if (previousVote !== 0) {
+              // Si cambió de -1 a +1 o viceversa, la diferencia neta es doble
+              currentVotedBy[voterKey] = requestedDelta;
+              voteDelta = requestedDelta - previousVote;
+            } else {
+              // Primer voto de este usuario en esta canción
+              currentVotedBy[voterKey] = requestedDelta;
+              voteDelta = requestedDelta;
+            }
+
+            const updatedVotes = Math.max(0, item.votes + voteDelta);
+            return {
+              ...item,
+              votes: updatedVotes,
+              votedBy: currentVotedBy,
+            };
+          })
           .sort((a, b) => b.votes - a.votes);
+
         room.lastUpdated = Date.now();
         enqueueEventForHost('VOTE_TRACK', payload);
         await saveDistributedRoom(room);

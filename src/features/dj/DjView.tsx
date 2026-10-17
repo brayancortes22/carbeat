@@ -141,7 +141,7 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
             onQueueTrack={handleQueueTrack}
           />
         ) : (
-          <QueueVoteList queue={queue} onVote={handleVote} />
+          <QueueVoteList queue={queue} onVote={handleVote} currentDjId={djName} />
         )}
       </GlassCard>
 
