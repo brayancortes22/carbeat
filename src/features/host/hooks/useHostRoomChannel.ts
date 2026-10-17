@@ -12,6 +12,8 @@ interface UseHostRoomChannelProps {
   queue: QueueItem[];
   setQueue: React.Dispatch<React.SetStateAction<QueueItem[]>>;
   playerState: ReturnType<typeof globalAudioEngine.getState>;
+  onNext?: () => void;
+  onPrev?: () => void;
 }
 
 export function useHostRoomChannel({
@@ -21,6 +23,8 @@ export function useHostRoomChannel({
   queue,
   setQueue,
   playerState,
+  onNext,
+  onPrev,
 }: UseHostRoomChannelProps) {
   const channel = useMemo(() => new RoomChannel(roomId, true), [roomId]);
   const [connectedDjs, setConnectedDjs] = useState<string[]>([]);
@@ -124,6 +128,15 @@ export function useHostRoomChannel({
       if (msg.type === 'QUEUE_TRACK') {
         const payload = msg.payload as { track: Track; requestedBy: string; isAutopilot?: boolean };
         enqueueTrack(payload.track, payload.requestedBy, payload.isAutopilot || false);
+      } else if (msg.type === 'HOST_COMMAND') {
+        const payload = msg.payload as { command: string };
+        if (payload?.command === 'TOGGLE_PLAY') {
+          globalAudioEngine.toggle();
+        } else if (payload?.command === 'NEXT_TRACK') {
+          if (onNext) onNext();
+        } else if (payload?.command === 'PREV_TRACK') {
+          if (onPrev) onPrev();
+        }
       } else if (msg.type === 'VOTE_TRACK') {
         const payload = msg.payload as { queueId: string; delta: number };
         const updatedQueue = queueRef.current

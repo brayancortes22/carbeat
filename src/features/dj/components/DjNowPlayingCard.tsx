@@ -1,7 +1,6 @@
 import React from 'react';
-import { Volume2 } from 'lucide-react';
+import { Volume2, Play, Pause, SkipForward, SkipBack } from 'lucide-react';
 import { TrackCover } from '../../../components/ui/TrackCover';
-import { Badge } from '../../../components/ui/Badge';
 import { Track } from '../../../types/track.types';
 
 interface LivePlaybackState {
@@ -13,9 +12,17 @@ interface LivePlaybackState {
 
 interface DjNowPlayingCardProps {
   playback: LivePlaybackState;
+  onTogglePlay?: () => void;
+  onNext?: () => void;
+  onPrev?: () => void;
 }
 
-export const DjNowPlayingCard: React.FC<DjNowPlayingCardProps> = ({ playback }) => {
+export const DjNowPlayingCard: React.FC<DjNowPlayingCardProps> = ({
+  playback,
+  onTogglePlay,
+  onNext,
+  onPrev,
+}) => {
   const progressPercent = playback.duration > 0
     ? (playback.currentTime / playback.duration) * 100
     : 0;
@@ -27,14 +34,14 @@ export const DjNowPlayingCard: React.FC<DjNowPlayingCardProps> = ({ playback }) 
   };
 
   return (
-    <div className="my-2.5 p-3 rounded-2xl bg-gradient-to-r from-cyan-950/40 to-slate-900/60 border border-cyan-500/30 flex flex-col gap-2 shadow-xl shadow-cyan-950/30">
+    <div className="my-2 p-3 rounded-2xl bg-gradient-to-r from-cyan-950/40 via-slate-900/60 to-purple-950/30 border border-cyan-500/30 flex flex-col gap-2.5 shadow-xl shadow-cyan-950/30">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <div className="relative">
             <TrackCover
               src={playback.currentTrack?.coverUrl}
               alt="Car Playing"
-              className="w-11 h-11 rounded-xl shadow-md"
+              className="w-12 h-12 rounded-xl shadow-md shrink-0"
             />
             {playback.isPlaying && (
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
@@ -55,11 +62,42 @@ export const DjNowPlayingCard: React.FC<DjNowPlayingCardProps> = ({ playback }) 
             </p>
           </div>
         </div>
-        <Badge variant={playback.isPlaying ? 'emerald' : 'slate'} className="text-[9px] shrink-0">
-          {playback.isPlaying ? 'En Vivo' : 'En Pausa'}
-        </Badge>
+
+        {/* Controles Remotos de Cabina para el Pasajero/Copiloto */}
+        <div className="flex items-center gap-1 shrink-0">
+          {onPrev && (
+            <button
+              onClick={onPrev}
+              title="Volver canción anterior"
+              className="p-2 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-300 hover:text-white transition-all active:scale-90 cursor-pointer"
+            >
+              <SkipBack className="w-4 h-4" />
+            </button>
+          )}
+
+          {onTogglePlay && (
+            <button
+              onClick={onTogglePlay}
+              title={playback.isPlaying ? 'Pausar música del carro' : 'Reanudar música del carro'}
+              className="p-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black shadow-md shadow-cyan-500/30 transition-all active:scale-95 cursor-pointer"
+            >
+              {playback.isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current translate-x-0.5" />}
+            </button>
+          )}
+
+          {onNext && (
+            <button
+              onClick={onNext}
+              title="Pasar a siguiente canción"
+              className="p-2 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-300 hover:text-white transition-all active:scale-90 cursor-pointer"
+            >
+              <SkipForward className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* Barra de Tiempo y Progreso en Vivo */}
       <div className="space-y-1">
         <div className="h-1.5 w-full bg-slate-800/80 rounded-full overflow-hidden">
           <div
@@ -69,6 +107,7 @@ export const DjNowPlayingCard: React.FC<DjNowPlayingCardProps> = ({ playback }) 
         </div>
         <div className="flex justify-between text-[10px] text-slate-500 font-mono">
           <span>{formatTime(playback.currentTime)}</span>
+          <span className="text-cyan-400/80 font-bold">{playback.isPlaying ? '● Reproduciendo' : '⏸ En Pausa'}</span>
           <span>{formatTime(playback.duration)}</span>
         </div>
       </div>
