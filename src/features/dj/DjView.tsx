@@ -83,7 +83,7 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
   }, [channel, djName]);
 
   return (
-    <div className="min-h-screen bg-[#08090E] p-3 sm:p-5 flex flex-col justify-between max-w-xl mx-auto pb-4">
+    <div className="h-[100dvh] max-h-[100dvh] w-full bg-[#08090E] p-2.5 sm:p-5 flex flex-col justify-between max-w-xl mx-auto overflow-hidden">
       {/* Header DJ */}
       <header className="flex items-center justify-between pb-3 border-b border-white/5">
         <button
