@@ -16,6 +16,7 @@ import { apiUrl } from '../../core/network/api-config';
 import { startHostAnnouncer, stopHostAnnouncer } from '../../core/network/host-discovery';
 import { StorageService } from '../../core/storage/storage-service';
 import { queueCacher } from '../../core/audio/queue-cacher';
+import { folderWatcher } from '../../core/audio/folder-watcher';
 import { useHostRoomChannel } from './hooks/useHostRoomChannel';
 import { useHostAutopilot } from './hooks/useHostAutopilot';
 
@@ -32,6 +33,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isAnnouncing, setIsAnnouncing] = useState(false);
   const [hostLanIp, setHostLanIp] = useState(window.location.hostname);
+  const [watchedFolder, setWatchedFolder] = useState<string>('');
 
   const { channel, connectedDjs, broadcastSync, enqueueTrack, closeRoom } = useHostRoomChannel({
     roomId,
@@ -48,14 +50,48 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   queueRef.current = queue;
   catalogRef.current = catalog;
 
-  // Cargar automáticamente música local persistente de IndexedDB al arrancar
+  // Cargar música de IndexedDB y restaurar vigilancia de carpeta física al arrancar
   useEffect(() => {
     LocalAudioDatabase.loadAllTracks().then((localTracks) => {
       if (localTracks.length > 0) {
         setCatalog((prev) => StorageService.deduplicateTracks([...localTracks, ...prev]));
       }
     });
+
+    // Intentar restaurar la carpeta que el chofer ya había vinculado
+    folderWatcher.restoreWatchedFolder((newTracks) => {
+      if (newTracks.length > 0) {
+        setCatalog((prev) => {
+          const merged = StorageService.deduplicateTracks([...newTracks, ...prev]);
+          broadcastSync(queueRef.current, merged);
+          return merged;
+        });
+      }
+    }).then((restored) => {
+      if (restored) {
+        setWatchedFolder(folderWatcher.getFolderName());
+      }
+    });
+
+    return () => {
+      folderWatcher.stop();
+    };
   }, []);
+
+  const handlePickWatchedFolder = async () => {
+    const success = await folderWatcher.pickAndWatchFolder((newTracks) => {
+      if (newTracks.length > 0) {
+        setCatalog((prev) => {
+          const merged = StorageService.deduplicateTracks([...newTracks, ...prev]);
+          broadcastSync(queueRef.current, merged);
+          return merged;
+        });
+      }
+    });
+    if (success) {
+      setWatchedFolder(folderWatcher.getFolderName());
+    }
+  };
 
   // Pre-calentar y almacenar en caché en segundo plano la siguiente canción en la cola
   useEffect(() => {
@@ -223,9 +259,11 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
       <HostHeader
         catalogCount={catalog.length}
         isAnnouncing={isAnnouncing}
+        watchedFolderName={watchedFolder}
         onCloseRoom={() => closeRoom(onBackToLanding)}
         onOpenSearch={() => setIsSearchModalOpen(true)}
         onOpenLibrary={() => setIsLibraryOpen(true)}
+        onPickWatchedFolder={handlePickWatchedFolder}
         onFolderSelect={handleFolderSelect}
       />
 
