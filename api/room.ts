@@ -24,14 +24,27 @@ interface RoomState {
   lastUpdated: number;
 }
 
-// Almacén en memoria de salas activas (Caché L1 local)
-const roomsStore = new Map<string, RoomState>();
+// Almacén en memoria de salas activas (Caché L1 local ultra rápida)
+interface CachedL1Entry {
+  room: RoomState;
+  cachedAt: number;
+}
+const roomsStore = new Map<string, CachedL1Entry>();
 
 // Almacén Persistente Distribuido (Caché L2 cross-instance para Vercel Serverless)
 const KV_BUCKET = process.env.KV_BUCKET || '6LJLYBBrT3DWs6NRzDaZfe';
 const KV_BASE = `https://kvdb.io/${KV_BUCKET}`;
+const L1_TTL_MS = 2500; // 2.5s de frescura L1 antes de volver a llamar a KV
 
 async function getDistributedRoom(roomId: string): Promise<RoomState | null> {
+  const now = Date.now();
+  const l1 = roomsStore.get(roomId);
+
+  // Si L1 está fresco (<2.5s), responder en 0ms sin viaje externo de red
+  if (l1 && (now - l1.cachedAt < L1_TTL_MS)) {
+    return l1.room;
+  }
+
   try {
     const res = await fetch(`${KV_BASE}/room_${roomId}`, {
       headers: { 'Cache-Control': 'no-cache' }
@@ -39,18 +52,18 @@ async function getDistributedRoom(roomId: string): Promise<RoomState | null> {
     if (res.ok) {
       const data = (await res.json()) as RoomState;
       if (data && data.roomId) {
-        roomsStore.set(roomId, data);
+        roomsStore.set(roomId, { room: data, cachedAt: Date.now() });
         return data;
       }
     }
   } catch {
     /* Fallback a L1 */
   }
-  return roomsStore.get(roomId) || null;
+  return l1?.room || null;
 }
 
 async function saveDistributedRoom(room: RoomState): Promise<void> {
-  roomsStore.set(room.roomId, room);
+  roomsStore.set(room.roomId, { room, cachedAt: Date.now() });
   try {
     await fetch(`${KV_BASE}/room_${room.roomId}`, {
       method: 'POST',
@@ -91,7 +104,8 @@ export default async function handler(req: any, res: any) {
   if (action === 'discover') {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const activeRooms: any[] = [];
-    for (const r of roomsStore.values()) {
+    for (const entry of roomsStore.values()) {
+      const r = entry.room;
       if (now - r.hostLastSeen <= INACTIVE_TIMEOUT_MS) {
         const activeDjs = Object.entries(r.djs).filter(([_, time]) => now - time < DJ_TIMEOUT_MS);
         activeRooms.push({

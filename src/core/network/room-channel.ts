@@ -155,8 +155,12 @@ export class RoomChannel {
       }
     };
 
-    this.httpPollInterval = setInterval(poll, isHost ? 1200 : 1500);
-    setTimeout(poll, 100);
+    // Frecuencia optimizada para latencia ultra-baja en cabina
+    this.httpPollInterval = setInterval(poll, isHost ? 700 : 900);
+    setTimeout(poll, 50);
+
+    // Permitir forzar sincronización instantánea tras enviar un evento
+    (this as any)._triggerImmediateSync = () => setTimeout(poll, 60);
   }
 
   private initWebSocket(url: string): void {
@@ -265,7 +269,13 @@ export class RoomChannel {
           senderName,
           payload,
         }),
-      }).catch(() => {});
+      })
+        .then(() => {
+          if (typeof (this as any)._triggerImmediateSync === 'function') {
+            (this as any)._triggerImmediateSync();
+          }
+        })
+        .catch(() => {});
     } catch {
       /* ignore */
     }
