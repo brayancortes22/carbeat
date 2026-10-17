@@ -1,4 +1,5 @@
 import { Track } from '../../types/track.types';
+import { apiUrl } from '../network/api-config';
 
 export class AiAutopilotService {
   private static recentTrackIds: Set<string> = new Set();
@@ -28,7 +29,7 @@ export class AiAutopilotService {
         title: currentTrack.title || '',
       });
 
-      const res = await fetch(`/api/yt/related?${params.toString()}`);
+      const res = await fetch(apiUrl(`/api/yt/related?${params.toString()}`));
       if (!res.ok) return null;
 
       const candidates = (await res.json()) as Track[];

@@ -138,6 +138,13 @@ export function useHostRoomChannel({
           setConnectedDjs(Array.from(djHeartbeatsRef.current.keys()));
         }
         broadcastSync(queueRef.current, catalogRef.current);
+      } else if ((msg.type as any) === 'ACTIVE_DJS_UPDATE') {
+        const payload = msg.payload as { djs: string[]; count: number };
+        if (Array.isArray(payload.djs)) {
+          const now = Date.now();
+          payload.djs.forEach((name) => djHeartbeatsRef.current.set(name, now));
+          setConnectedDjs(Array.from(djHeartbeatsRef.current.keys()));
+        }
       } else if ((msg.type as any) === 'ROOM_LEAVE') {
         if (msg.senderName) {
           djHeartbeatsRef.current.delete(msg.senderName);
@@ -146,17 +153,21 @@ export function useHostRoomChannel({
       }
     });
 
-    // Enviar latido HTTP del Host a la nube cada 3.5 segundos para que la sala nunca expire
-    const hostHeartbeat = setInterval(() => {
+    // Enviar anuncio HTTP del Host inmediatamente y latidos cada 3 segundos
+    const sendAnnounce = () => {
       fetch(apiUrl('/api/room'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'HOST_ANNOUNCE',
+          roomId,
           payload: { roomId, roomName: `Carro ${roomId}` },
         }),
       }).catch(() => {});
-    }, 3500);
+    };
+
+    sendAnnounce();
+    const hostHeartbeat = setInterval(sendAnnounce, 3000);
 
     const handleBeforeUnload = () => {
       const payload = JSON.stringify({ type: 'CLOSE_ROOM', action: 'close', roomId });
