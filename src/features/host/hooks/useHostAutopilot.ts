@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Track, QueueItem } from '../../../types/track.types';
-import { AiAutopilotService } from '../../../core/ai/ai-autopilot-service';
+import { AiAutopilotService, AutopilotMode } from '../../../core/ai/ai-autopilot-service';
 
 interface UseHostAutopilotProps {
   currentTrack: Track | null;
@@ -18,6 +18,12 @@ export function useHostAutopilot({
   const [isAutopilotActive, setIsAutopilotActive] = useState<boolean>(() => {
     return localStorage.getItem('carbeat_autopilot_enabled') === 'true';
   });
+
+  const [autopilotMode, setAutopilotMode] = useState<AutopilotMode>(() => {
+    const saved = localStorage.getItem('carbeat_autopilot_mode');
+    return (saved as AutopilotMode) || 'hybrid';
+  });
+
   const isPredictingRef = useRef(false);
   const lastPredictedTrackIdRef = useRef<string | null>(null);
 
@@ -26,9 +32,22 @@ export function useHostAutopilot({
       const next = !prev;
       localStorage.setItem('carbeat_autopilot_enabled', String(next));
       if (next) {
-        // Al encender, permitir evaluación inmediata
         lastPredictedTrackIdRef.current = null;
       }
+      return next;
+    });
+  };
+
+  const cycleAutopilotMode = () => {
+    setAutopilotMode((prev) => {
+      // Ciclo: hybrid -> local -> cloud -> hybrid
+      let next: AutopilotMode = 'hybrid';
+      if (prev === 'hybrid') next = 'local';
+      else if (prev === 'local') next = 'cloud';
+      else if (prev === 'cloud') next = 'hybrid';
+
+      localStorage.setItem('carbeat_autopilot_mode', next);
+      lastPredictedTrackIdRef.current = null;
       return next;
     });
   };
@@ -52,7 +71,12 @@ export function useHostAutopilot({
     const timer = setTimeout(async () => {
       isPredictingRef.current = true;
       try {
-        const nextTrack = await AiAutopilotService.predictNextTrack(currentTrack, queue);
+        const nextTrack = await AiAutopilotService.predictNextTrack(
+          currentTrack,
+          queue,
+          catalog,
+          autopilotMode
+        );
         if (nextTrack) {
           lastPredictedTrackIdRef.current = currentTrack.id;
           onEnqueueTrack(nextTrack);
@@ -63,10 +87,12 @@ export function useHostAutopilot({
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [isAutopilotActive, currentTrack, catalog, queue.length, onEnqueueTrack]);
+  }, [isAutopilotActive, currentTrack, catalog, queue.length, autopilotMode, onEnqueueTrack]);
 
   return {
     isAutopilotActive,
+    autopilotMode,
     toggleAutopilot,
+    cycleAutopilotMode,
   };
 }
