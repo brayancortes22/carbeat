@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Track } from '../../../types/track.types';
-import { Search, Plus, Music, Check, Loader2, X } from 'lucide-react';
+import { Search, Plus, Music, Check, Loader2, X, RotateCw, Smartphone, Car, Cpu } from 'lucide-react';
 import { TrackCover } from '../../../components/ui/TrackCover';
-import { TOP_TRENDING_TRACKS, MusicSearchService } from '../../../core/network/music-search-service';
+import { getFreshTrendingTracks, MusicSearchService } from '../../../core/network/music-search-service';
+import { NetworkHealthService, NetworkHealthStatus } from '../../../core/network/network-health';
 import { apiUrl } from '../../../core/network/api-config';
 
 interface CatalogBrowserProps {
@@ -22,7 +23,23 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [requestingId, setRequestingId] = useState<string | null>(null);
+  const [trendingTracks, setTrendingTracks] = useState<Track[]>(() => getFreshTrendingTracks(8));
+  const [dataRoute, setDataRoute] = useState<'auto' | 'phone' | 'car'>('auto');
+  const [netHealth, setNetHealth] = useState<NetworkHealthStatus | null>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Evaluar periódicamente la calidad de red para el modo 'auto'
+  useEffect(() => {
+    NetworkHealthService.getHealth().then(setNetHealth);
+    const interval = setInterval(() => {
+      NetworkHealthService.getHealth().then(setNetHealth);
+    }, 8000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleRefreshTrending = () => {
+    setTrendingTracks(getFreshTrendingTracks(8));
+  };
 
   // Búsqueda en vivo con debounce de 350ms en la nube (YouTube + OmniRoute)
   useEffect(() => {
@@ -38,7 +55,6 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     setIsSearching(true);
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        // 1. Intentar primero con el endpoint nativo de Vercel/Vite usando apiUrl
         const res = await fetch(apiUrl(`/api/yt/search?q=${encodeURIComponent(query)}`));
         if (res.ok) {
           const songs = (await res.json()) as Track[];
@@ -55,7 +71,6 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
           }
         }
 
-        // 2. Fallback robusto con OmniMusicGateway en caso de que el backend falle
         const fallbackSongs = await MusicSearchService.searchOnline(query, 'DJ Móvil');
         setSearchResults(fallbackSongs);
       } catch (err) {
@@ -82,7 +97,6 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     setTimeout(() => setRequestingId(null), 1200);
   };
 
-  const [dataRoute, setDataRoute] = useState<'car' | 'phone'>('car');
   const [filterSource, setFilterSource] = useState<'all' | 'local_car' | 'trending'>('all');
 
   // Canciones a mostrar: resultados de búsqueda o catálogo enriquecido siempre con tendencias
@@ -120,9 +134,9 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
       });
     }
 
-    // 2. Complementar con las tendencias recomendadas del viaje
+    // 2. Complementar con las tendencias recomendadas del viaje rotativas
     if (filterSource === 'all' || filterSource === 'trending') {
-      TOP_TRENDING_TRACKS.forEach((t) => {
+      trendingTracks.forEach((t) => {
         if (!isCurrentPlaying(t)) {
           const key = `${norm(t.title)}_${norm(t.artist)}`;
           if (!seen.has(key)) {
@@ -134,7 +148,7 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
     }
 
     return result;
-  }, [searchTerm, searchResults, catalog, currentTrackId, currentTrackTitle, filterSource]);
+  }, [searchTerm, searchResults, catalog, currentTrackId, currentTrackTitle, filterSource, trendingTracks]);
 
   return (
     <div className="flex flex-col h-full space-y-3">
@@ -195,17 +209,62 @@ export const CatalogBrowser: React.FC<CatalogBrowserProps> = ({
           </button>
         </div>
 
-        {/* Indicador de Red de Descarga */}
-        <button
-          onClick={() => setDataRoute((prev) => (prev === 'car' ? 'phone' : 'car'))}
-          title="Toca para alternar si se descarga con datos del Carro o del Celular"
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/10 hover:border-cyan-500/40 text-[11px] text-slate-300 cursor-pointer"
-        >
-          <span className="text-slate-500">Datos:</span>
-          <span className="font-bold text-cyan-400">
-            {dataRoute === 'car' ? '🚗 Pantalla Carro' : '📱 Celular Pasajero'}
-          </span>
-        </button>
+        {/* Indicador de Red de Descarga Inteligente y Auto-Detección */}
+        <div className="flex items-center gap-1.5">
+          {filterSource === 'trending' && (
+            <button
+              onClick={handleRefreshTrending}
+              title="Refrescar y rotar recomendaciones de tendencias"
+              className="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-cyan-400 hover:text-white transition-all active:scale-95 cursor-pointer"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          <button
+            onClick={() =>
+              setDataRoute((prev) => {
+                if (prev === 'auto') return 'phone';
+                if (prev === 'phone') return 'car';
+                return 'auto';
+              })
+            }
+            title={
+              dataRoute === 'auto'
+                ? `Auto-Detección Activa: Usando la mejor red detectada (${netHealth?.label || 'Analizando...'})`
+                : dataRoute === 'phone'
+                ? 'Forzado: Consumiendo datos del celular'
+                : 'Forzado: Consumiendo datos de la pantalla del carro'
+            }
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${
+              dataRoute === 'auto'
+                ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-300'
+                : dataRoute === 'phone'
+                ? 'bg-purple-500/10 border-purple-500/40 text-purple-300'
+                : 'bg-white/5 border-white/10 text-slate-300'
+            }`}
+          >
+            <span className="text-slate-500">Datos:</span>
+            {dataRoute === 'auto' && (
+              <span className="font-bold text-cyan-400 flex items-center gap-1">
+                <Cpu className="w-3 h-3 text-cyan-400" />
+                <span>Auto ({netHealth?.effectiveType === 'wifi' ? '🚗 Wi-Fi' : '📱 4G'})</span>
+              </span>
+            )}
+            {dataRoute === 'phone' && (
+              <span className="font-bold text-purple-400 flex items-center gap-1">
+                <Smartphone className="w-3 h-3" />
+                <span>Celular</span>
+              </span>
+            )}
+            {dataRoute === 'car' && (
+              <span className="font-bold text-slate-300 flex items-center gap-1">
+                <Car className="w-3 h-3" />
+                <span>Carro</span>
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Lista de Canciones con Deduplicación */}
