@@ -213,7 +213,7 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     enqueueTrack(track, 'IA Autopilot', true);
   }, [enqueueTrack]);
 
-  const { isAutopilotActive, toggleAutopilot } = useHostAutopilot({
+  const { isAutopilotActive, autopilotMode, toggleAutopilot, cycleAutopilotMode } = useHostAutopilot({
     currentTrack: playerState.currentTrack,
     catalog,
     queue,
@@ -305,7 +305,9 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
             <HostQueueActions
               queueCount={queue.length}
               isAutopilotActive={isAutopilotActive}
+              autopilotMode={autopilotMode}
               onToggleAutopilot={toggleAutopilot}
+              onCycleAutopilotMode={cycleAutopilotMode}
               onPurgeQueue={handlePurgeQueue}
               onSaveAllToLibrary={handleSaveAllToLibrary}
               onOpenLibrary={() => setIsLibraryOpen(true)}
