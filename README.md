@@ -1,63 +1,67 @@
-# 🚗 CarBeat: Collaborative In-Car Jukebox & DJ System (v1.2.0)
+# 🚗 CarBeat: Collaborative In-Car Jukebox & DJ System (v1.5.1)
 
-Sistema colaborativo de música en tiempo real para vehículos y viajes. Convierte la pantalla del carro (Tablet, Android Auto, Navegador) en un reproductor central (Host) y permite que los pasajeros se unan como DJs desde sus teléfonos móviles sin descargas obligatorias para proponer y votar canciones en vivo.
-
----
-
-## 🌟 Novedades de la Versión 1.2.0
-
-- **🤖 Modo Autopilot IA (DJ Autónomo Inteligente):**
-  - Cuando la cola se vacía o queda una sola canción, el motor de IA predice y encola de **1 en 1** temas armónicamente afines basados en lo que está sonando (`/api/yt/related`).
-  - Previene saturaciones de red o peticiones masivas y filtra canciones ya reproducidas.
-- **🚗 Biblioteca Personal del Chofer:**
-  - El conductor puede guardar pistas individuales o vaciar la cola de pasajeros a su colección personal persistente (`driver_library_v1`).
-  - Acceso instantáneo a su propia música desde el botón "Mi Música" para reproducirla en cualquier momento durante el viaje.
-- **⚡ Purga de Cola de un Solo Tacazo:**
-  - Botón "Vaciar" en el panel del carro para eliminar todas las peticiones de los pasajeros de inmediato con confirmación de seguridad y sincronización instantánea a todos los celulares.
-- **🏷️ Distinción Visual de Origen de Pistas:**
-  - Badges intuitivos en tiempo real tanto en la pantalla del vehículo como en los celulares de los pasajeros:
-    - `[🚗 Chofer / Carro]` para música del conductor o archivos locales/USB.
-    - `[📱 Pasajero: Nombre]` para peticiones de los acompañantes.
-    - `[✨ IA Autopilot]` para recomendaciones generadas por la IA.
-- **🚪 Cierre de Sala y Expulsión Limpia:**
-  - Al salir del Modo Carro, el reproductor apaga de inmediato el audio (`pause()`), destruye la sala en el backend y emite `CLOSE_ROOM`, mostrando un modal de fin de viaje y regresando a todos los pasajeros al inicio.
-- **📱 App Móvil Android 100% Offline (Cero Pantallas Blancas):**
-  - Empaquetado de assets locales (`dist/`) directo en el APK servido bajo `https://localhost` mediante Capacitor y Gradle.
-  - Funciona de forma instantánea y completamente desconectada en cabinas vehiculares sin internet, sin errores de DNS (`net::ERR_NAME_NOT_RESOLVED`).
-- **💾 Almacenamiento Local Dual e IndexedDB en la Tablet:**
-  - Nueva pestaña en "Mi Música" para gestionar directamente los archivos de audio locales (.mp3, .flac, .wav) almacenados en la tablet/USB.
-  - Carga automática en memoria al iniciar la cabina y escaneo directo con 1 tap.
-- **⏮️ Historial Real de Pistas Previas:**
-  - Botón de retroceso (`handlePrev`) con doble click (<2.5s) que navega hacia atrás en la pila histórica real de canciones reproducidas en lugar de simplemente reiniciar la canción actual.
-- **🛡️ Cierre Atómico y Erradicación de Salas Fantasma:**
-  - Purga de salas huérfanas en menos de 6 segundos en `/api/room` y extracción robusta de `roomId` desde POST body y query.
-- **🔄 Auto-Actualización Dinámica de Versión y Descarga Directa:**
-  - Notificación inteligente en tiempo real y descarga instantánea del APK compilado.
+Sistema colaborativo de música en tiempo real para vehículos y viajes por carretera. Convierte la pantalla del carro (Tablet, Android Auto, Navegador) en un reproductor central (Host) y permite que los pasajeros se unan como DJs desde sus teléfonos móviles sin descargas obligatorias para proponer, votar canciones y controlar la música de la cabina en vivo.
 
 ---
 
-## 🛠️ Arquitectura Técnica
+## 🌟 Novedades de la Versión 1.5.1
+
+### 1. 🔀 Modos Inteligentes de Autopilot IA (Híbrido, Local, Nube y Mix Crossover)
+- **⚡ Modo Híbrido (Por Defecto):** Mezcla inteligente que prioriza música local de la tablet/USB del chofer y complementa con recomendaciones armónicas en la nube vía YouTube Music (`/api/yt/related`).
+- **💾 Modo Solo Local (Cero Datos):** 100% desconectado, diseñado para carreteras sin cobertura o para ahorrar el plan de datos.
+- **🌐 Modo Solo Nube:** Búsqueda continua en streaming sin tocar archivos del vehículo.
+- **🎉 Modo Mix Crossover Aleatorio:** Matriz multigénero exhaustiva que rota automáticamente entre:
+  - *Rock en Español & Clásicos* (Soda Stereo, Enanitos Verdes, Hombres G, Vilma Palma, Queen)
+  - *Reggaetón & Perreo Urbano* (Bad Bunny, Karol G, Feid, Don Omar, Daddy Yankee)
+  - *Vallenato Romántico & Parranda* (Diomedes Díaz, Binomio de Oro, Silvestre Dangond)
+  - *Salsa & Merengue* (Joe Arroyo, Grupo Niche, Marc Anthony, Héctor Lavoe)
+  - *Música Popular & Despecho* (Yeison Jiménez, Darío Gómez, Jessi Uribe, Carin León)
+  - *Cumbia & Tropical* (Los Ángeles Azules, Rodolfo Aicardi, Pastor López)
+  - *Regional Mexicano, Rancheras, Pop Latino y Bachata*.
+
+### 2. 🤖 Detección Automática Inteligente de Red (`Datos: Auto`)
+- **Evaluación Telemática (`NetworkHealthService`):** Diagnóstico en vivo de latencia (RTT) y velocidad estimada con la Network Information API.
+- **Asignación Dinámica:** Identifica automáticamente si la descarga o búsqueda debe consumirse con los datos del celular del pasajero (`📱 4G`) o de la pantalla del carro (`🚗 Wi-Fi`), conmutando según cuál tenga mejor señal.
+
+### 3. 🕒 Historial de Reproducción con Guardado Individual y Masivo
+- **Historial Completo del Viaje:** Pestaña dedicada en "Mi Música" que registra las canciones que han sonado en el trayecto de forma persistente (`carbeat_playback_history_v1`).
+- **✨ Botón "Guardar TODAS en Mi Música":** Agrega con un solo toque todo el historial del viaje a la biblioteca personal del conductor.
+- **Guardado Individual por Pista:** Botón táctil `[+]` por canción con confirmación visual `[✔]`.
+
+### 4. 🎛️ Botón Táctil Ergonómico de Conducción Segura
+- Botón directo `"Guardar en Mi Música"` (`BookmarkPlus`) en la pantalla de reproducción del carro para que el chofer lo presione sin desviar la atención al volante.
+- Watchdog de fin de pista en `YouTubePlayerBridge` que previene congelamientos o pausas involuntarias al terminar canciones de streaming.
+
+### 5. 📱 Blindaje Responsive Universal (100dvh & Safe-Areas)
+- Soporte para **Dynamic Viewport Height (`100dvh`)** y Safe Area Insets (`env(safe-area-inset-top)` / `bottom`) para evitar recortes con la barra de navegación o el notch en cualquier modelo de iPhone, Samsung, Xiaomi o tablets vehiculares.
+- Pestaña de Tendencias enriquecida con más de 20 éxitos y botón de refresco `[🔀 Nuevas Recomendaciones]`.
+
+---
+
+## 🛠️ Arquitectura Técnica de CarBeat
 
 ```
-[ Car Screen / Host ]
-   ├── AudioEngine (Híbrido)
-   │     ├── YouTubePlayerBridge (YouTube IFrame API - Full Songs)
-   │     └── HTML5 Audio (USB / Audius MP3)
+[ Car Screen / Tablet / Host ]
+   ├── AudioEngine (Híbrido Universal)
+   │     ├── YouTubePlayerBridge (IFrame API Watchdog - Full Songs)
+   │     └── HTML5 Audio (USB / Audius MP3 / Tablet Storage)
    ├── RoomChannel (Cuatri-Capa Resiliente)
    │     ├── Capa 1: WebSocket Local (/ws-rooms)
    │     ├── Capa 2: WebRTC DataChannel (PeerJS P2P: carbeat-room-{ID})
    │     ├── Capa 3: HTTP Serverless Relay (/api/room en Vercel)
    │     └── Capa 4: BroadcastChannel (Local tabs)
-   ├── AiAutopilotService (DJ Autónomo predictivo 1-a-1)
-   └── DriverLibrary (Almacenamiento persistente del chofer)
+   ├── AiAutopilotService (Híbrido / Local / Nube / Mix Crossover)
+   ├── FolderWatcherService (Detección persistente de carpetas USB/Tablet)
+   ├── NetworkHealthService (Telemetría de conexión y auto-enrutamiento de datos)
+   └── DriverLibrary & PlaybackHistory (Almacenamiento persistente IndexedDB & LocalStorage)
          ▲
-         │ Sincronización en tiempo real (<20ms local / <200ms cloud)
+         │ Sincronización telemática (<20ms local / <150ms cloud)
          ▼
 [ Mobile Passengers / DJs ]
    ├── DjView (Explorador + Cola de Votaciones con Badges)
-   ├── HostScannerModal (Escaneo Wi-Fi /ws-discovery + HTTP)
-   ├── RoomClosedModal (Expulsión elegante al terminar el viaje)
-   └── OmniMusicGateway (Búsqueda en YouTube Music, Audius y Catálogo)
+   ├── DjNowPlayingCard (Control Remoto: Play/Pause/Next/Prev)
+   ├── CatalogBrowser (Búsqueda Universal + Tendencias Rotativas + Auto Red)
+   └── NewTrackModal (Búsqueda en YouTube Music, Apple/Spotify y Subida Local)
 ```
 
 ---
@@ -66,33 +70,40 @@ Sistema colaborativo de música en tiempo real para vehículos y viajes. Convier
 
 ### Requisitos
 - Node.js 18+
-- Red Wi-Fi o Hotspot compartido (para uso en vehículos)
+- Red Wi-Fi o Hotspot compartido (para uso vehicular)
+- Android Studio / SDK (opcional, para compilar el APK)
 
-### Instalación
+### Instalación de Dependencias
 ```bash
 npm install
 ```
 
-### Ejecutar en Desarrollo
+### Ejecutar en Desarrollo (Vite + WebSocket Server)
 ```bash
-npm run dev
+npm run dev:all
 ```
-
-El servidor estará accesible en:
 - Local: `http://localhost:5173`
 - Red Local (Wi-Fi): `http://<TU_IP_LOCAL>:5173`
 
-### Compilación para Producción
+### Compilación Web y Sincronización con Android
 ```bash
 npm run build
+npx cap sync android
 ```
+
+### Compilar APK Android
+```bash
+cd android
+./gradlew assembleDebug
+```
+El APK generado se ubica en: `public/downloads/carbeat-latest.apk`.
 
 ---
 
-## 🌿 Estrategia de Ramas Git (Regla de Oro)
-1. `development`: Desarrollo activo y pruebas de integración de nuevas funcionalidades.
+## 🌿 Estrategia de Ramas Git (Regla de Oro GEMINI.md)
+1. `development`: Desarrollo activo, refactorizaciones e integración continua.
 2. `qa`: Aseguramiento de calidad, staging y validación previa a producción.
-3. `main`: Producción oficial y estable con despliegue automático a Vercel y compilación de APK en GitHub Actions.
+3. `main`: Producción oficial y estable con despliegue automático a Vercel y descarga del APK.
 
 ---
 
