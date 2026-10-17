@@ -22,6 +22,7 @@ export class YouTubePlayerBridge {
   private timer: ReturnType<typeof setInterval> | null = null;
   private currentTime = 0;
   private duration = 0;
+  private hasTriggeredEnded = false;
 
   private constructor() {
     this.initScript();
@@ -78,6 +79,8 @@ export class YouTubePlayerBridge {
   }
 
   public loadVideo(videoId: string, autoPlay = true): void {
+    this.hasTriggeredEnded = false;
+    this.currentTime = 0;
     if (!this.isApiReady || !window.YT || !window.YT.Player) {
       this.pendingVideoId = videoId;
       return;
@@ -123,8 +126,12 @@ export class YouTubePlayerBridge {
           onStateChange: (event: any) => {
             // YT.PlayerState: 0 = ENDED, 1 = PLAYING, 2 = PAUSED, 3 = BUFFERING
             if (event.data === 0) {
-              this.stateHandler?.('ended');
+              if (!this.hasTriggeredEnded) {
+                this.hasTriggeredEnded = true;
+                this.stateHandler?.('ended');
+              }
             } else if (event.data === 1) {
+              this.hasTriggeredEnded = false;
               this.stateHandler?.('playing');
             } else if (event.data === 2) {
               this.stateHandler?.('paused');
@@ -146,6 +153,16 @@ export class YouTubePlayerBridge {
         try {
           this.currentTime = this.player.getCurrentTime() || 0;
           this.duration = this.player.getDuration() || this.duration;
+
+          // Salvaguarda Watchdog: Si llega al final del track (faltando <0.8s) y no ha saltado ended, dispararlo
+          if (
+            !this.hasTriggeredEnded &&
+            this.duration > 5 &&
+            this.currentTime >= this.duration - 0.8
+          ) {
+            this.hasTriggeredEnded = true;
+            this.stateHandler?.('ended');
+          }
         } catch {
           /* ignore */
         }

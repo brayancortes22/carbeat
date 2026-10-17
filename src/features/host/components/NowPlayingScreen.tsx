@@ -1,5 +1,5 @@
-import React from 'react';
-import { Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Disc } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play, Pause, SkipForward, SkipBack, Volume2, VolumeX, Disc, BookmarkPlus, Check } from 'lucide-react';
 import { Track } from '../../../types/track.types';
 import { Badge } from '../../../components/ui/Badge';
 import { AudioVisualizer } from './AudioVisualizer';
@@ -15,6 +15,7 @@ interface NowPlayingScreenProps {
   onPrev: () => void;
   onSeek: (seconds: number) => void;
   onVolumeChange: (vol: number) => void;
+  onSaveCurrentToLibrary?: () => void;
 }
 
 export const NowPlayingScreen: React.FC<NowPlayingScreenProps> = ({
@@ -28,11 +29,21 @@ export const NowPlayingScreen: React.FC<NowPlayingScreenProps> = ({
   onPrev,
   onSeek,
   onVolumeChange,
+  onSaveCurrentToLibrary,
 }) => {
   const formatTime = (secs: number) => {
     const mins = Math.floor(secs / 60);
     const remaining = Math.floor(secs % 60);
     return `${mins}:${remaining < 10 ? '0' : ''}${remaining}`;
+  };
+
+  const [isSaved, setIsSaved] = useState(false);
+
+  const handleSaveToDriver = () => {
+    if (!track || !onSaveCurrentToLibrary) return;
+    onSaveCurrentToLibrary();
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2500);
   };
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -55,10 +66,35 @@ export const NowPlayingScreen: React.FC<NowPlayingScreenProps> = ({
         </div>
 
         <div className="space-y-0.5 sm:space-y-1 w-full truncate">
-          <div className="flex items-center justify-center gap-2 mb-0.5">
+          <div className="flex items-center justify-center gap-2 mb-1 flex-wrap">
             <Badge variant={track?.source === 'passenger_dj' ? 'purple' : 'cyan'}>
               {track?.source === 'passenger_dj' ? `DJ: ${track.addedBy || 'Pasajero'}` : 'Música Local'}
             </Badge>
+
+            {track && onSaveCurrentToLibrary && (
+              <button
+                type="button"
+                onClick={handleSaveToDriver}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all active:scale-95 border ${
+                  isSaved
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                    : 'bg-white/10 hover:bg-white/15 text-slate-200 border-white/10 hover:border-cyan-500/50'
+                }`}
+                title="Guardar en la biblioteca personal del chofer"
+              >
+                {isSaved ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>¡Guardada en Mi Música!</span>
+                  </>
+                ) : (
+                  <>
+                    <BookmarkPlus className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Guardar en Mi Música</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
           <h2 className="text-lg sm:text-xl md:text-2xl font-black text-white truncate px-2">
             {track?.title || 'Sin reproducción'}

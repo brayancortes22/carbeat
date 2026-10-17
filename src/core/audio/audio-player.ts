@@ -44,6 +44,13 @@ export class AudioEngine {
         this.onEndedCallback?.();
       }
     });
+    this.audio.addEventListener('error', (e) => {
+      console.warn('[AudioEngine] Error en reproducción HTML5:', e);
+      if (!this.isYtActive) {
+        this.notify();
+        this.onEndedCallback?.();
+      }
+    });
 
     this.ytBridge.onStateChange((state) => {
       if (!this.isYtActive) return;
