@@ -35,6 +35,63 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   const [hostLanIp, setHostLanIp] = useState(window.location.hostname);
   const [watchedFolder, setWatchedFolder] = useState<string>('');
 
+  const queueRef = useRef(queue);
+  const catalogRef = useRef(catalog);
+  const historyRef = useRef<Track[]>([]);
+  const lastPrevClickRef = useRef<number>(0);
+  queueRef.current = queue;
+  catalogRef.current = catalog;
+
+  // Manejar el avance a la siguiente canción
+  const handleNext = useCallback(() => {
+    const current = globalAudioEngine.getState().currentTrack;
+    if (current) {
+      historyRef.current.push(current);
+      if (historyRef.current.length > 50) historyRef.current.shift();
+    }
+    const currentQueue = queueRef.current;
+    const currentCatalog = catalogRef.current;
+    if (currentQueue.length > 0) {
+      const nextItem = currentQueue[0];
+      setQueue((prev) => prev.slice(1));
+      globalAudioEngine.loadTrack(nextItem.track, true);
+    } else if (currentCatalog.length > 0) {
+      const currentIdx = current ? currentCatalog.findIndex((t) => t.id === current.id) : -1;
+      const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % currentCatalog.length : 0;
+      globalAudioEngine.loadTrack(currentCatalog[nextIdx], true);
+    }
+  }, []);
+
+  // Manejar retroceso a la canción anterior con historial real y fallback de catálogo
+  const handlePrev = useCallback(() => {
+    const currentState = globalAudioEngine.getState();
+    const now = Date.now();
+    const isRapidClick = now - lastPrevClickRef.current < 2500;
+    lastPrevClickRef.current = now;
+
+    // Si lleva más de 3 segundos y es el primer clic, reiniciar inicio de pista
+    if (currentState.currentTime > 3 && !isRapidClick) {
+      globalAudioEngine.seek(0);
+      return;
+    }
+
+    // 1. Prioridad: Desapilar pista previa del historial real
+    if (historyRef.current.length > 0) {
+      const prevTrack = historyRef.current.pop()!;
+      globalAudioEngine.loadTrack(prevTrack, true);
+      return;
+    }
+
+    // 2. Fallback: Pista anterior en el catálogo del vehículo
+    const currentCatalog = catalogRef.current;
+    if (currentCatalog.length > 0) {
+      const current = currentState.currentTrack;
+      const currentIdx = current ? currentCatalog.findIndex((t) => t.id === current.id) : -1;
+      const prevIdx = currentIdx > 0 ? currentIdx - 1 : currentCatalog.length - 1;
+      globalAudioEngine.loadTrack(currentCatalog[prevIdx], true);
+    }
+  }, []);
+
   const { channel, connectedDjs, broadcastSync, enqueueTrack, closeRoom } = useHostRoomChannel({
     roomId,
     catalog,
@@ -42,13 +99,9 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
     queue,
     setQueue,
     playerState,
+    onNext: handleNext,
+    onPrev: handlePrev,
   });
-
-  const queueRef = useRef(queue);
-  const catalogRef = useRef(catalog);
-  const historyRef = useRef<Track[]>([]);
-  queueRef.current = queue;
-  catalogRef.current = catalog;
 
   // Cargar música de IndexedDB y restaurar vigilancia de carpeta física al arrancar
   useEffect(() => {
@@ -94,65 +147,12 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
   };
 
   // Pre-calentar y almacenar en caché en segundo plano la siguiente canción en la cola
+  // Pre-calentar y almacenar en caché en segundo plano la siguiente canción en la cola
   useEffect(() => {
     if (queue.length > 0) {
       queueCacher.preloadNextInQueue(queue);
     }
   }, [queue]);
-
-  const lastPrevClickRef = useRef<number>(0);
-
-  // Manejar el avance a la siguiente canción
-  const handleNext = useCallback(() => {
-    const current = globalAudioEngine.getState().currentTrack;
-    if (current) {
-      historyRef.current.push(current);
-      if (historyRef.current.length > 50) historyRef.current.shift();
-    }
-    const currentQueue = queueRef.current;
-    const currentCatalog = catalogRef.current;
-    if (currentQueue.length > 0) {
-      const nextItem = currentQueue[0];
-      setQueue((prev) => prev.slice(1));
-      globalAudioEngine.loadTrack(nextItem.track, true);
-    } else if (currentCatalog.length > 0) {
-      const currentIdx = current ? currentCatalog.findIndex((t) => t.id === current.id) : -1;
-      const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % currentCatalog.length : 0;
-      globalAudioEngine.loadTrack(currentCatalog[nextIdx], true);
-    }
-  }, []);
-
-  // Manejar retroceso a la canción anterior con historial real y fallback de catálogo
-  const handlePrev = useCallback(() => {
-    const currentState = globalAudioEngine.getState();
-    const now = Date.now();
-    const isRapidClick = now - lastPrevClickRef.current < 2500;
-    lastPrevClickRef.current = now;
-
-    // Si lleva más de 3 segundos y es el primer clic, reiniciar inicio de pista
-    if (currentState.currentTime > 3 && !isRapidClick) {
-      globalAudioEngine.seek(0);
-      return;
-    }
-
-    // 1. Prioridad: Desapilar pista previa del historial real
-    if (historyRef.current.length > 0) {
-      const prevTrack = historyRef.current.pop()!;
-      globalAudioEngine.loadTrack(prevTrack, true);
-      return;
-    }
-
-    // 2. Fallback: Pista anterior en el catálogo del vehículo
-    const currentCat = catalogRef.current;
-    if (currentCat.length > 1 && currentState.currentTrack) {
-      const currentIdx = currentCat.findIndex((t) => t.id === currentState.currentTrack?.id);
-      const prevIdx = currentIdx > 0 ? currentIdx - 1 : currentCat.length - 1;
-      globalAudioEngine.loadTrack(currentCat[prevIdx], true);
-      return;
-    }
-
-    globalAudioEngine.seek(0);
-  }, []);
 
   // Suscribirse a cambios de audio y difundir a los DJs
   useEffect(() => {
@@ -300,7 +300,14 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
               onOpenLibrary={() => setIsLibraryOpen(true)}
             />
             <div className="flex-1 overflow-hidden mt-2">
-              <HostQueueList queue={queue} onRemoveItem={(id) => setQueue((prev) => prev.filter((i) => i.queueId !== id))} />
+              <HostQueueList
+                queue={queue}
+                onRemoveItem={(id) => setQueue((prev) => prev.filter((i) => i.queueId !== id))}
+                onSaveToLibrary={(track) => {
+                  StorageService.addToDriverLibrary(track);
+                  alert(`"${track.title}" guardada en tu biblioteca personal de chofer.`);
+                }}
+              />
             </div>
           </GlassCard>
         </div>

@@ -70,6 +70,18 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
     onLeaveRoom();
   };
 
+  const handleRemoteToggle = useCallback(() => {
+    channel.send('HOST_COMMAND', djName, djName, { command: 'TOGGLE_PLAY' });
+  }, [channel, djName]);
+
+  const handleRemoteNext = useCallback(() => {
+    channel.send('HOST_COMMAND', djName, djName, { command: 'NEXT_TRACK' });
+  }, [channel, djName]);
+
+  const handleRemotePrev = useCallback(() => {
+    channel.send('HOST_COMMAND', djName, djName, { command: 'PREV_TRACK' });
+  }, [channel, djName]);
+
   return (
     <div className="min-h-screen bg-[#08090E] p-3 sm:p-5 flex flex-col justify-between max-w-xl mx-auto pb-4">
       {/* Header DJ */}
@@ -102,8 +114,13 @@ export const DjView: React.FC<DjViewProps> = ({ roomId, djName, hostIp, hostPort
         </div>
       </header>
 
-      {/* Tarjeta En Vivo: Sonando en la Pantalla del Carro */}
-      <DjNowPlayingCard playback={livePlayback} />
+      {/* Tarjeta En Vivo con Control Remoto para el Pasajero */}
+      <DjNowPlayingCard
+        playback={livePlayback}
+        onTogglePlay={handleRemoteToggle}
+        onNext={handleRemoteNext}
+        onPrev={handleRemotePrev}
+      />
 
       {/* Selector de pestañas */}
       <div className="grid grid-cols-2 gap-2 my-1.5">
