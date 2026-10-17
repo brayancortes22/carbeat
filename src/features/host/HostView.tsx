@@ -285,6 +285,11 @@ export const HostView: React.FC<HostViewProps> = ({ onBackToLanding, roomId = 'B
               onPrev={handlePrev}
               onSeek={(s) => globalAudioEngine.seek(s)}
               onVolumeChange={(v) => globalAudioEngine.setVolume(v)}
+              onSaveCurrentToLibrary={() => {
+                if (playerState.currentTrack) {
+                  StorageService.addToDriverLibrary(playerState.currentTrack);
+                }
+              }}
             />
           </GlassCard>
         </div>
