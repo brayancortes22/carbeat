@@ -24,8 +24,54 @@ interface RoomState {
   lastUpdated: number;
 }
 
-// Almacén en memoria de salas activas para Vercel Serverless
+// Almacén en memoria de salas activas (Caché L1 local)
 const roomsStore = new Map<string, RoomState>();
+
+// Almacén Persistente Distribuido (Caché L2 cross-instance para Vercel Serverless)
+const KV_BUCKET = process.env.KV_BUCKET || '6LJLYBBrT3DWs6NRzDaZfe';
+const KV_BASE = `https://kvdb.io/${KV_BUCKET}`;
+
+async function getDistributedRoom(roomId: string): Promise<RoomState | null> {
+  try {
+    const res = await fetch(`${KV_BASE}/room_${roomId}`, {
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+    if (res.ok) {
+      const data = (await res.json()) as RoomState;
+      if (data && data.roomId) {
+        roomsStore.set(roomId, data);
+        return data;
+      }
+    }
+  } catch {
+    /* Fallback a L1 */
+  }
+  return roomsStore.get(roomId) || null;
+}
+
+async function saveDistributedRoom(room: RoomState): Promise<void> {
+  roomsStore.set(room.roomId, room);
+  try {
+    await fetch(`${KV_BASE}/room_${room.roomId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(room),
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+async function deleteDistributedRoom(roomId: string): Promise<void> {
+  roomsStore.delete(roomId);
+  try {
+    await fetch(`${KV_BASE}/room_${roomId}`, {
+      method: 'DELETE',
+    });
+  } catch {
+    /* ignore */
+  }
+}
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -40,13 +86,6 @@ export default async function handler(req: any, res: any) {
   const now = Date.now();
   const INACTIVE_TIMEOUT_MS = 60000; // 60 segundos tolerante para conexiones celulares
   const DJ_TIMEOUT_MS = 25000; // 25 segundos para considerar DJ inactivo
-
-  // Limpiar salas inactivas (>60 segundos sin señal del host)
-  for (const [id, r] of roomsStore.entries()) {
-    if (now - r.hostLastSeen > INACTIVE_TIMEOUT_MS) {
-      roomsStore.delete(id);
-    }
-  }
 
   // 1. Descubrimiento de Carros en Vivo (Escáner Wi-Fi / Red)
   if (action === 'discover') {
@@ -73,10 +112,11 @@ export default async function handler(req: any, res: any) {
     const role = (req.query?.role as string) || 'dj';
     const since = parseInt((req.query?.since as string) || '0', 10);
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    const existing = roomsStore.get(roomId);
+
+    const existing = await getDistributedRoom(roomId);
 
     if (!existing || now - existing.hostLastSeen > INACTIVE_TIMEOUT_MS) {
-      if (existing) roomsStore.delete(roomId);
+      if (existing) await deleteDistributedRoom(roomId);
       return res.status(200).json({
         exists: false,
         error: `La sala "${roomId}" no existe o el vehículo está desconectado.`,
@@ -84,7 +124,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // Filtrar DJs activos
-    const activeDjEntries = Object.entries(existing.djs).filter(([_, t]) => now - t < DJ_TIMEOUT_MS);
+    const activeDjEntries = Object.entries(existing.djs || {}).filter(([_, t]) => now - t < DJ_TIMEOUT_MS);
     const activeDjNames = activeDjEntries.map(([name]) => name);
 
     // Eventos pendientes para el Host (enviados por los DJs)
@@ -117,13 +157,13 @@ export default async function handler(req: any, res: any) {
 
       // A) Cierre de Sala por el Chofer (Detener y expulsar a todos)
       if (type === 'CLOSE_ROOM' || type === 'ROOM_CLOSED' || body.action === 'close' || payload?.action === 'close') {
-        roomsStore.delete(targetRoomId);
+        await deleteDistributedRoom(targetRoomId);
         return res.status(200).json({ ok: true, closed: true, message: 'Sala cerrada por el conductor' });
       }
 
-      // B) Anuncio del Host (Pantalla del Carro) -> Solo aquí se crea o renueva la sala
+      // B) Anuncio del Host (Pantalla del Carro) -> Crear o renovar sala
       if (type === 'HOST_ANNOUNCE') {
-        let room = roomsStore.get(targetRoomId);
+        let room = await getDistributedRoom(targetRoomId);
         if (!room) {
           room = {
             roomId: targetRoomId,
@@ -139,27 +179,24 @@ export default async function handler(req: any, res: any) {
             pendingEvents: [],
             lastUpdated: Date.now(),
           };
-          roomsStore.set(targetRoomId, room);
         } else {
           room.hostLastSeen = Date.now();
           if (payload?.roomName) room.roomName = payload.roomName;
           if (payload?.hostIp) room.hostIp = payload.hostIp;
           room.lastUpdated = Date.now();
         }
+        await saveDistributedRoom(room);
         return res.status(200).json({ ok: true, roomId: targetRoomId });
       }
 
-      // Si la sala no existe en roomsStore, permitir crear sala temporal si es un DJ intentando conectar
-      let room = roomsStore.get(targetRoomId);
+      let room = await getDistributedRoom(targetRoomId);
       if (!room || now - room.hostLastSeen > INACTIVE_TIMEOUT_MS) {
-        if (room) roomsStore.delete(targetRoomId);
+        if (room) await deleteDistributedRoom(targetRoomId);
         return res.status(404).json({ exists: false, error: `La sala "${targetRoomId}" está inactiva o cerrada.` });
       }
 
-      // Inicializar array de eventos si no existe
       if (!room.pendingEvents) room.pendingEvents = [];
 
-      // Función auxiliar para registrar evento en tránsito para el Host
       const enqueueEventForHost = (evtType: string, evtPayload: any) => {
         room!.pendingEvents.push({
           id: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -179,6 +216,7 @@ export default async function handler(req: any, res: any) {
         const name = payload?.djName || senderName || 'DJ';
         room.djs[name] = Date.now();
         enqueueEventForHost(type, { djName: name, ...payload });
+        await saveDistributedRoom(room);
         return res.status(200).json({ ok: true, djCount: Object.keys(room.djs).length });
       }
 
@@ -187,6 +225,7 @@ export default async function handler(req: any, res: any) {
         const name = payload?.djName || senderName || 'DJ';
         delete room.djs[name];
         enqueueEventForHost('ROOM_LEAVE', { djName: name });
+        await saveDistributedRoom(room);
         return res.status(200).json({ ok: true });
       }
 
@@ -194,6 +233,7 @@ export default async function handler(req: any, res: any) {
       if (type === 'PURGE_QUEUE') {
         room.queue = [];
         room.lastUpdated = Date.now();
+        await saveDistributedRoom(room);
         return res.status(200).json(room);
       }
 
@@ -202,7 +242,6 @@ export default async function handler(req: any, res: any) {
         const track: Track = payload.track;
         const requestedBy: string = payload.requestedBy || senderName || 'DJ Pasajero';
 
-        // Buscar si ya existe la pista en la cola
         const existingItem = room.queue.find(
           (item) =>
             item.track.id === track.id ||
@@ -233,8 +272,8 @@ export default async function handler(req: any, res: any) {
         room.queue.sort((a, b) => b.votes - a.votes);
         room.lastUpdated = Date.now();
 
-        // Notificar al Host para que incorpore la canción a su reproductor
         enqueueEventForHost('QUEUE_TRACK', { track, requestedBy, isAutopilot: payload?.isAutopilot });
+        await saveDistributedRoom(room);
         return res.status(200).json(room);
       }
 
@@ -249,6 +288,7 @@ export default async function handler(req: any, res: any) {
           .sort((a, b) => b.votes - a.votes);
         room.lastUpdated = Date.now();
         enqueueEventForHost('VOTE_TRACK', payload);
+        await saveDistributedRoom(room);
         return res.status(200).json(room);
       }
 
@@ -273,9 +313,11 @@ export default async function handler(req: any, res: any) {
             .sort((a: any, b: any) => b.votes - a.votes);
         }
         room.lastUpdated = Date.now();
+        await saveDistributedRoom(room);
         return res.status(200).json(room);
       }
 
+      await saveDistributedRoom(room);
       return res.status(200).json(room);
     } catch (err: any) {
       return res.status(500).json({ error: err.message || 'Error procesando acción' });
