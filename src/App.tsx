@@ -3,6 +3,8 @@ import { LandingView } from './features/landing/LandingView';
 import { HostView } from './features/host/HostView';
 import { DjView } from './features/dj/DjView';
 import { SimulatorStudioView } from './features/simulator/SimulatorStudioView';
+import { AppUpdaterService, UpdateCheckResult } from './core/updater/app-updater';
+import { AutoUpdateModal } from './features/landing/components/AutoUpdateModal';
 
 type AppMode = 'landing' | 'host' | 'dj' | 'simulator';
 
@@ -19,6 +21,16 @@ export const App: React.FC = () => {
   const [djName, setDjName] = useState('DJ_Copiloto');
   const [hostIp, setHostIp] = useState<string | undefined>(undefined);
   const [hostPort, setHostPort] = useState<number | undefined>(undefined);
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
+
+  // Comprobar automáticamente actualizaciones del sistema en segundo plano
+  useEffect(() => {
+    AppUpdaterService.checkForUpdates().then((res) => {
+      if (res && res.hasUpdate) {
+        setUpdateInfo(res);
+      }
+    });
+  }, []);
 
   // Parsear parámetros de URL para simulación, QR y enlaces directos
   useEffect(() => {
@@ -104,6 +116,14 @@ export const App: React.FC = () => {
           hostIp={hostIp}
           hostPort={hostPort}
           onLeaveRoom={handleBackToLanding}
+        />
+      )}
+
+      {/* Modal de Auto-Actualización Autónoma */}
+      {updateInfo?.hasUpdate && (
+        <AutoUpdateModal
+          updateInfo={updateInfo}
+          onDismiss={() => setUpdateInfo(null)}
         />
       )}
     </div>

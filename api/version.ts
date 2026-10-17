@@ -5,15 +5,14 @@ export default async function handler(_req: any, res: any) {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
   return res.status(200).json({
-    version: '1.2.0',
+    version: '1.2.1',
     buildDate: '2026-10-16',
     latestApk: '/downloads/carbeat-latest.apk',
     features: [
-      'Doble flujo: Música del Chofer vs Peticiones de Pasajeros',
-      'Cierre de Sala con detención de audio y expulsión en vivo',
-      'Biblioteca del Conductor y Purga de un Tacazo',
-      'Autopilot IA (DJ Autónomo de 1 en 1)',
-      'Auto-actualización dinámica de versión en caliente',
+      'Conexión Ultra Rápida con caché L1 en caliente (<50ms)',
+      'Sondeo acelerado en cabina (700ms) con sincronización reactiva',
+      'Auto-actualizador autónomo con modal de instalación rápida',
+      'Autopilot DJ con IA y Cola compartida en vivo',
     ],
   });
 }
