@@ -40,11 +40,12 @@ export function useHostAutopilot({
 
   const cycleAutopilotMode = () => {
     setAutopilotMode((prev) => {
-      // Ciclo: hybrid -> local -> cloud -> hybrid
+      // Ciclo: hybrid -> local -> cloud -> crossover -> hybrid
       let next: AutopilotMode = 'hybrid';
       if (prev === 'hybrid') next = 'local';
       else if (prev === 'local') next = 'cloud';
-      else if (prev === 'cloud') next = 'hybrid';
+      else if (prev === 'cloud') next = 'crossover';
+      else if (prev === 'crossover') next = 'hybrid';
 
       localStorage.setItem('carbeat_autopilot_mode', next);
       lastPredictedTrackIdRef.current = null;

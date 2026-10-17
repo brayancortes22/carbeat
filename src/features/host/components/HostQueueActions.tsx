@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, BookmarkPlus, Sparkles, FolderHeart, HardDrive, Globe, Zap, Power } from 'lucide-react';
+import { Trash2, BookmarkPlus, Sparkles, FolderHeart, HardDrive, Globe, Zap, Power, Shuffle } from 'lucide-react';
 import { AutopilotMode } from '../../../core/ai/ai-autopilot-service';
 
 interface HostQueueActionsProps {
@@ -43,6 +43,13 @@ export const HostQueueActions: React.FC<HostQueueActionsProps> = ({
         label: 'Solo Nube',
         icon: <Globe className="w-3.5 h-3.5 text-purple-400" />,
         style: 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-sm shadow-purple-500/20',
+      };
+    }
+    if (autopilotMode === 'crossover') {
+      return {
+        label: 'Mix Crossover',
+        icon: <Shuffle className="w-3.5 h-3.5 text-pink-400" />,
+        style: 'bg-pink-500/20 border-pink-500/50 text-pink-300 shadow-sm shadow-pink-500/20',
       };
     }
     return {
