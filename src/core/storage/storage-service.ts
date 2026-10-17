@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   CATALOG: 'carbeat_local_catalog_v3',
   QUEUE: 'carbeat_local_queue_v3', // v3: purga automática de cualquier cola sucia previa
   DRIVER_LIBRARY: 'carbeat_driver_library_v1',
+  PLAYBACK_HISTORY: 'carbeat_playback_history_v1',
   ROOM_ID: 'carbeat_saved_room_id',
   DJ_NAME: 'carbeat_saved_dj_name',
 } as const;
@@ -123,6 +124,48 @@ export class StorageService {
   public static removeFromDriverLibrary(trackId: string): Track[] {
     const current = this.loadDriverLibrary();
     const updated = current.filter((t) => t.id !== trackId);
+    this.saveDriverLibrary(updated);
+    return updated;
+  }
+
+  public static loadPlaybackHistory(): Track[] {
+    try {
+      if (typeof window === 'undefined') return [];
+      const data = localStorage.getItem(STORAGE_KEYS.PLAYBACK_HISTORY);
+      if (!data) return [];
+      const parsed = JSON.parse(data) as Track[];
+      return Array.isArray(parsed) ? this.deduplicateTracks(parsed) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public static addToPlaybackHistory(track: Track): Track[] {
+    try {
+      if (!track || !track.id) return this.loadPlaybackHistory();
+      const current = this.loadPlaybackHistory();
+      // Insertar al inicio y mantener máximo 60 pistas
+      const updated = this.deduplicateTracks([track, ...current]).slice(0, 60);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEYS.PLAYBACK_HISTORY, JSON.stringify(updated));
+      }
+      return updated;
+    } catch {
+      return [];
+    }
+  }
+
+  public static clearPlaybackHistory(): void {
+    try {
+      if (typeof window === 'undefined') return;
+      localStorage.removeItem(STORAGE_KEYS.PLAYBACK_HISTORY);
+    } catch {}
+  }
+
+  public static addManyToDriverLibrary(tracks: Track[]): Track[] {
+    const current = this.loadDriverLibrary();
+    const tagged = tracks.map((t) => ({ ...t, source: 'local_car' as const, addedBy: 'Chofer (Carro)' }));
+    const updated = this.deduplicateTracks([...tagged, ...current]);
     this.saveDriverLibrary(updated);
     return updated;
   }
