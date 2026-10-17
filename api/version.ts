@@ -5,15 +5,15 @@ export default async function handler(_req: any, res: any) {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
   return res.status(200).json({
-    version: '1.3.0',
-    buildDate: '2026-10-16',
+    version: '1.4.0',
+    buildDate: '2026-10-17',
     latestApk: '/downloads/carbeat-latest.apk',
     features: [
-      'Blindaje Estricto de Votación: 1 solo voto por DJ/Dispositivo por canción',
-      'Pre-Caché en Cola en Segundo Plano (cero congelamientos al pasar a streaming)',
-      'Separación clara de Carpetas: Música Local del Carro vs Aportadas por Pasajeros',
-      'Selector de Origen de Datos: Pantalla del Carro vs Celular del Pasajero',
-      'Interfaz 100% Responsiva adaptada a pantallas de carro (1024x600) y móviles',
+      'Búsqueda en la Nube Reparada: Conexión híbrida Vercel API + OmniRoute fallback en móvil',
+      'Envío Instantáneo de Canciones: Eliminados los lags artificiales para transmisión en <50ms',
+      'Música Local del Celular: Permite al DJ subir MP3s descargados en su teléfono al carro',
+      'Barra de Búsqueda Móvil: Teclado semántico, auto-corrección off y botón limpiar rápido',
+      'Blindaje de Votos 1-por-DJ y Pre-Caché en Cola Anti-Congelamiento',
     ],
   });
 }
