@@ -40,8 +40,9 @@ jobs:
       - name: Typecheck and Build Web Client
         run: npm run build
 
-      - name: Verify Relay Server Syntax
-        run: node --check server/relay-server.mjs
+      # server/relay-server.mjs ya no existe en la v2: el relé vive en server/relay.ts y lo cubren los tests.
+      - name: Run Tests (protocolo, motor de sala y relé)
+        run: npm test
 
   deploy-to-vercel:
     name: Production Deploy via Vercel CLI

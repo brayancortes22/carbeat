@@ -1,9 +1,13 @@
 node_modules
 dist
+dist-app
+dist-server
 dist-ssr
 *.local
 .env
 .env.*
+!.env.example
 .DS_Store
 Thumbs.db
 .vercel
+*.tsbuildinfo
