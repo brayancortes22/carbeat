@@ -1,40 +1,40 @@
 /**
- * Configuración dinámica de endpoints de red para CarBeat
- * Compatible con:
- * - Desarrollo Local (Vite dev server en localhost:5173 / ws 5174)
- * - Navegador Web en Producción (https://carbeat-pi.vercel.app)
- * - Aplicación Nativa Android / Tablet (Capacitor WebView)
+ * Dónde está la API de CarBeat según desde dónde se abra la interfaz:
+ * - Web en Vercel o Vite: misma origen (URLs relativas).
+ * - App Android (Capacitor sirve desde https://localhost): la web publicada.
+ * Se puede forzar con VITE_API_ORIGIN (por ejemplo para probar el APK contra un servidor LAN).
  */
-export const PROD_ORIGIN = 'https://carbeat-pi.vercel.app';
+export const PROD_ORIGIN: string = import.meta.env.VITE_API_ORIGIN || 'https://carbeat-pi.vercel.app';
+
+export function isNativeApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  return !!cap?.isNativePlatform?.();
+}
 
 export function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '';
-
-  const { hostname, port, protocol } = window.location;
-  const isDevVite = (hostname === 'localhost' || hostname === '127.0.0.1') && port === '5173';
-
-  // Si estamos dentro de la APK de Android (Capacitor usa capacitor:// o https://localhost sin puerto 5173)
-  if (protocol === 'capacitor:' || (!isDevVite && (hostname === 'localhost' || hostname === '127.0.0.1'))) {
-    return PROD_ORIGIN;
-  }
-
-  // En la web de producción o Vite dev server, usar URLs relativas estándar
+  if (import.meta.env.VITE_API_ORIGIN) return import.meta.env.VITE_API_ORIGIN;
+  if (isNativeApp()) return PROD_ORIGIN;
   return '';
 }
 
 export function apiUrl(path: string): string {
-  const base = getApiBaseUrl();
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${base}${cleanPath}`;
+  return `${getApiBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+/** Origen para los enlaces y QR que se comparten con los pasajeros. */
 export function getWebOrigin(): string {
-  if (typeof window === 'undefined') return PROD_ORIGIN;
-  const { hostname, port, protocol } = window.location;
-  const isDevVite = (hostname === 'localhost' || hostname === '127.0.0.1') && port === '5173';
-  if (protocol === 'capacitor:' || (!isDevVite && (hostname === 'localhost' || hostname === '127.0.0.1'))) {
-    return PROD_ORIGIN;
-  }
+  if (typeof window === 'undefined' || isNativeApp()) return PROD_ORIGIN;
   return window.location.origin;
 }
 
+/**
+ * El relé WebSocket sólo existe en desarrollo y en el servidor de red local (http:).
+ * En Vercel (https) no hay WebSocket propio: ahí van P2P + HTTP.
+ */
+export function getRoomWsUrl(): string | null {
+  if (typeof window === 'undefined' || isNativeApp()) return null;
+  if (window.location.protocol !== 'http:') return null;
+  return `ws://${window.location.host}/ws-room`;
+}

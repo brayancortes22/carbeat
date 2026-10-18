@@ -1,5 +1,5 @@
 import { CARBEAT_VERSION } from '../version';
-import { apiUrl, getApiBaseUrl } from '../network/api-config';
+import { apiUrl, getApiBaseUrl, isNativeApp } from '../network/api-config';
 
 export interface RemoteVersionInfo {
   version: string;
@@ -82,6 +82,12 @@ export class AppUpdaterService {
    */
   public static triggerApkDownload(apkUrl: string): void {
     if (typeof window === 'undefined') return;
+    // En el APK el WebView no gestiona descargas: navegar a una URL externa hace que
+    // Capacitor la abra en el navegador del sistema, que sí descarga e instala.
+    if (isNativeApp()) {
+      window.location.assign(apkUrl);
+      return;
+    }
     const a = document.createElement('a');
     a.href = apkUrl;
     a.download = 'carbeat-latest.apk';

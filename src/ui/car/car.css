@@ -1,0 +1,115 @@
+/*
+ * Estilos propios de la cabina del carro (parabrisas, radio, testigos). Van aparte de
+ * index.css porque sólo los usa la pantalla del carro: el pasajero no los descarga.
+ */
+
+/* ------------------------------------------------------------ parabrisas */
+
+.hw-windshield {
+  background: #03080c;
+  border: 1px solid rgb(140 220 255 / 0.08);
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.6),
+    0 24px 48px -28px rgb(0 0 0 / 0.9);
+}
+
+/* Cristal: el techo oscurece arriba, los pilares a los lados y un reflejo diagonal muy tenue
+   cruza el vidrio. Sin esto la franja parece un vídeo pegado, no una ventana. */
+.hw-glass {
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgb(2 4 7 / 0.75) 0%, rgb(2 4 7 / 0) 22%),
+    linear-gradient(0deg, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0) 26px),
+    linear-gradient(90deg, rgb(2 4 7 / 0.85) 0%, rgb(2 4 7 / 0) 9%, rgb(2 4 7 / 0) 91%, rgb(2 4 7 / 0.85) 100%),
+    linear-gradient(105deg, transparent 38%, rgb(207 250 254 / 0.035) 44%, transparent 52%),
+    linear-gradient(0deg, rgb(2 4 7 / 0.55) 0%, rgb(2 4 7 / 0) 18%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+
+/* De noche el parabrisas también baja (reóstato): una capa oscura encima del 3D, que es más
+   barato que un filtro sobre un lienzo que se repinta en cada fotograma. */
+html[data-night] .hw-glass {
+  background-color: rgb(0 0 0 / 0.3);
+}
+
+/* Reflejo del pórtico al pasar por encima de la cámara (≈0,9 s después de que se va). */
+.hw-pass {
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgb(207 250 254 / 0.32) 0%, rgb(103 232 249 / 0.12) 16%, transparent 34%);
+  animation: hw-pass 1.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes hw-pass {
+  0%, 48% { opacity: 0; transform: translateY(-30%); }
+  62% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(40%); }
+}
+
+/* ------------------------------------------------------------ pantalla de radio */
+
+/* Barrido de sintonización: una banda de luz recorre la pantalla de arriba abajo. */
+.mfd-tune-sweep {
+  background: linear-gradient(180deg, transparent 0%, rgb(103 232 249 / 0.0) 30%, rgb(103 232 249 / 0.22) 48%, rgb(207 250 254 / 0.38) 50%, rgb(103 232 249 / 0.18) 53%, transparent 70%);
+  animation: mfd-sweep 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Ruido de matriz de puntos mientras se sintoniza (puntos que parpadean a saltos). */
+.mfd-tune-noise {
+  background-image: radial-gradient(circle, rgb(103 232 249 / 0.55) 0.9px, transparent 1.2px);
+  background-size: 4px 4px;
+  mix-blend-mode: screen;
+  animation: mfd-noise 0.7s steps(6) both;
+}
+
+@keyframes mfd-sweep {
+  from { transform: translateY(-100%); opacity: 1; }
+  to { transform: translateY(100%); opacity: 0.2; }
+}
+
+@keyframes mfd-noise {
+  0% { opacity: 0.55; background-position: 0 0; }
+  20% { opacity: 0.35; background-position: 2px 1px; }
+  40% { opacity: 0.5; background-position: -1px 2px; }
+  60% { opacity: 0.25; background-position: 1px -2px; }
+  80% { opacity: 0.12; background-position: -2px 0; }
+  100% { opacity: 0; background-position: 0 1px; }
+}
+
+/* ------------------------------------------------------------ testigos */
+
+/* Encendido de un testigo: la bombilla parpadea un instante antes de quedarse fija, como
+   una lámpara real al recibir corriente. */
+.tt-power-on {
+  animation: tt-power-on 0.42s steps(1) both;
+}
+
+@keyframes tt-power-on {
+  0% { opacity: 0.15; }
+  18% { opacity: 1; }
+  32% { opacity: 0.35; }
+  50% { opacity: 1; }
+  64% { opacity: 0.7; }
+  78%, 100% { opacity: 1; }
+}
+
+/* ------------------------------------------------------------ luz ambiente */
+
+/* Tira LED inferior del cuadro: una línea cian que respira muy despacio. */
+.ambient-floor {
+  background: linear-gradient(90deg, transparent, rgb(34 211 238 / calc(0.55 * var(--glow))) 20%, rgb(103 232 249 / calc(0.85 * var(--glow))) 50%, rgb(34 211 238 / calc(0.55 * var(--glow))) 80%, transparent);
+  box-shadow: 0 0 18px 1px rgb(34 211 238 / calc(0.35 * var(--glow)));
+  animation: ambient-breathe 7s ease-in-out infinite;
+}
+
+@keyframes ambient-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hw-pass,
+  .mfd-tune-sweep,
+  .mfd-tune-noise {
+    display: none;
+  }
+}

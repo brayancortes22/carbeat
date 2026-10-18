@@ -1,0 +1,35 @@
+/*
+ * Ajustes propios de la app Android: se comporta como app, no como página.
+ * Sin selección de texto ni rebote de scroll, y con las zonas seguras de Android 15
+ * (de borde a borde) respetadas.
+ */
+html,
+body {
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Capacitor 8 inyecta --safe-area-inset-* en Android; env() en el resto. */
+:root {
+  --sat: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --sab: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --sal: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+  --sar: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+}
+
+/* Al pulsar, respuesta inmediata como un botón físico (sin esperar a hover). */
+.press {
+  transition: transform 120ms var(--ease-cluster), filter 120ms;
+}
+.press:active {
+  transform: scale(0.96);
+  filter: brightness(1.15);
+}
