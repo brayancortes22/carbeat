@@ -29,8 +29,9 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Build Web Assets (Vite)
-        run: npm run build
+      # La app nativa tiene su propia entrada (app.html) y sale en dist-app, que es el webDir de Capacitor.
+      - name: Build App Assets (Vite, modo app)
+        run: npm run build:app
 
       - name: Initialize & Sync Capacitor Android
         run: |

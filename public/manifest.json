@@ -1,21 +1,10 @@
 {
   "short_name": "CarBeat",
-  "name": "CarBeat - Jukebox de Cabina",
-  "icons": [
-    {
-      "src": "/icon-192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "/icon-512.png",
-      "type": "image/png",
-      "sizes": "512x512"
-    }
-  ],
+  "name": "CarBeat · La música del carro",
+  "icons": [{ "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" }],
   "start_url": "/",
-  "background_color": "#090A0F",
-  "theme_color": "#090A0F",
+  "background_color": "#05070a",
+  "theme_color": "#05070a",
   "display": "standalone",
   "orientation": "any"
 }

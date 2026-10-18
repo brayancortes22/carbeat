@@ -1,222 +1,208 @@
-import { Track } from '../../types/track.types';
-import { PlayerState } from '../../types/player.types';
+import type { Track } from '../../types/track.types';
+import type { PlayerState } from '../../types/player.types';
+import { videoIdOf } from '../../../shared/track';
+import { apiUrl } from '../network/api-config';
 import { YouTubePlayerBridge } from './youtube-player-bridge';
 
 type PlayerListener = (state: PlayerState) => void;
 
 /**
- * Motor de Audio Híbrido Universal de CarBeat:
- * - HTML5 Audio: Archivos locales del vehículo (USB/Almacenamiento) y streams MP3 de Audius.
- * - YouTube Bridge: Streaming oficial de YouTube Music (canciones 100% completas de 3 a 6+ minutos).
+ * Motor de audio del carro:
+ * - HTML5 Audio para archivos del carro (USB, tablet) y MP3 directos (Audius).
+ * - Reproductor oficial de YouTube (IFrame API) para canciones completas.
  */
 export class AudioEngine {
   private audio: HTMLAudioElement;
-  private ytBridge: YouTubePlayerBridge;
-  private currentTrack: Track | null = null;
-  private listeners: Set<PlayerListener> = new Set();
-  private isYtActive = false;
-  private isYtPlaying = false;
-  private onEndedCallback: (() => void) | null = null;
-  private currentVolume = 1;
-  private ticker: ReturnType<typeof setInterval> | null = null;
+  private yt: YouTubePlayerBridge;
+  private current: Track | null = null;
+  private listeners = new Set<PlayerListener>();
+  private ytActive = false;
+  private ytPlaying = false;
+  private endedHandler: (() => void) | null = null;
+  private errorHandler: ((track: Track, reason: string) => void) | null = null;
+  private volume = 1;
+  private loadToken = 0;
 
   constructor() {
     this.audio = new Audio();
-    this.audio.preload = 'metadata';
-    this.ytBridge = YouTubePlayerBridge.getInstance();
-    this.setupListeners();
-    this.startGlobalTicker();
-  }
+    this.audio.preload = 'auto';
+    this.yt = YouTubePlayerBridge.getInstance();
 
-  private setupListeners(): void {
-    this.audio.addEventListener('timeupdate', () => {
-      if (!this.isYtActive) this.notify();
-    });
-    this.audio.addEventListener('play', () => {
-      if (!this.isYtActive) this.notify();
-    });
-    this.audio.addEventListener('pause', () => {
-      if (!this.isYtActive) this.notify();
-    });
+    const html = () => !this.ytActive && this.notify();
+    this.audio.addEventListener('timeupdate', html);
+    this.audio.addEventListener('play', html);
+    this.audio.addEventListener('pause', html);
+    this.audio.addEventListener('loadedmetadata', html);
     this.audio.addEventListener('ended', () => {
-      if (!this.isYtActive) {
-        this.notify();
-        this.onEndedCallback?.();
-      }
+      if (this.ytActive) return;
+      this.notify();
+      this.endedHandler?.();
     });
-    this.audio.addEventListener('error', (e) => {
-      console.warn('[AudioEngine] Error en reproducción HTML5:', e);
-      if (!this.isYtActive) {
-        this.notify();
-        this.onEndedCallback?.();
-      }
+    this.audio.addEventListener('error', () => {
+      if (this.ytActive || !this.current || !this.audio.src) return;
+      this.fail(this.current, 'No se pudo leer el archivo de audio');
     });
 
-    this.ytBridge.onStateChange((state) => {
-      if (!this.isYtActive) return;
-      if (state === 'playing') {
-        this.isYtPlaying = true;
-        this.notify();
-      } else if (state === 'paused') {
-        this.isYtPlaying = false;
-        this.notify();
-      } else if (state === 'ended') {
-        this.isYtPlaying = false;
-        this.notify();
-        this.onEndedCallback?.();
-      }
+    this.yt.onStateChange((state) => {
+      if (!this.ytActive) return;
+      if (state === 'playing') this.ytPlaying = true;
+      else if (state === 'paused' || state === 'ended') this.ytPlaying = false;
+      this.notify();
+      if (state === 'ended') this.endedHandler?.();
     });
+    this.yt.onError((code) => {
+      if (this.ytActive && this.current) this.fail(this.current, YouTubePlayerBridge.describeError(code));
+    });
+    // El IFrame de YouTube no emite progreso: se consulta cada segundo mientras suena.
+    setInterval(() => this.ytActive && this.ytPlaying && this.notify(), 1000);
   }
 
-  private startGlobalTicker(): void {
-    if (this.ticker) clearInterval(this.ticker);
-    this.ticker = setInterval(() => {
-      if (this.isYtActive && this.isYtPlaying) {
-        this.notify();
-      }
-    }, 1000);
+  /** Error de reproducción: se avisa y se pasa a la siguiente, sin quedarse colgado. */
+  private fail(track: Track, reason: string): void {
+    this.notify();
+    this.errorHandler?.(track, reason);
+    const token = this.loadToken;
+    setTimeout(() => token === this.loadToken && this.endedHandler?.(), 1200);
   }
 
-  public subscribe(listener: PlayerListener): () => void {
+  subscribe(listener: PlayerListener): () => void {
     this.listeners.add(listener);
     listener(this.getState());
     return () => this.listeners.delete(listener);
   }
 
   private notify(): void {
-    const state = this.getState();
-    this.listeners.forEach((listener) => listener(state));
+    const s = this.getState();
+    this.listeners.forEach((l) => l(s));
   }
 
-  public getState(): PlayerState {
-    if (this.isYtActive) {
-      const ytTime = this.ytBridge.getCurrentTime();
-      const ytDur = this.ytBridge.getDuration() || (this.currentTrack?.duration ?? 210);
+  getState(): PlayerState {
+    if (this.ytActive) {
       return {
-        currentTrack: this.currentTrack,
-        isPlaying: this.isYtPlaying,
-        currentTime: ytTime,
-        duration: ytDur,
-        volume: this.currentVolume,
-        isMuted: this.currentVolume === 0,
+        currentTrack: this.current,
+        isPlaying: this.ytPlaying,
+        currentTime: this.yt.getCurrentTime(),
+        duration: this.yt.getDuration() || this.current?.duration || 0,
+        volume: this.volume,
+        isMuted: this.volume === 0,
       };
     }
-
     return {
-      currentTrack: this.currentTrack,
-      isPlaying: !this.audio.paused && !this.audio.ended && this.audio.readyState > 2,
+      currentTrack: this.current,
+      // !paused y no readyState: si no, cada micro-pausa de buffer contaría como pausa.
+      isPlaying: !this.audio.paused && !this.audio.ended,
       currentTime: this.audio.currentTime || 0,
-      duration: this.audio.duration || (this.currentTrack?.duration ?? 0),
+      duration: Number.isFinite(this.audio.duration) ? this.audio.duration : this.current?.duration ?? 0,
       volume: this.audio.volume,
       isMuted: this.audio.muted,
     };
   }
 
-  public loadTrack(track: Track, autoPlay = true): void {
-    this.currentTrack = track;
-    const videoId = track.videoId || (track.id.startsWith('yt_') ? track.id.replace('yt_', '') : null);
-
+  load(track: Track, autoPlay = true, startAt = 0): void {
+    this.loadToken++;
+    this.current = track;
+    const videoId = videoIdOf(track);
     if (videoId) {
-      this.isYtActive = true;
+      this.ytActive = true;
       this.audio.pause();
-      this.audio.src = '';
-      this.isYtPlaying = autoPlay;
-      this.ytBridge.loadVideo(videoId, autoPlay);
+      this.audio.removeAttribute('src');
+      this.ytPlaying = autoPlay;
+      this.yt.loadVideo(videoId, autoPlay, startAt);
       this.notify();
-    } else if (
-      track.id.startsWith('apple_') ||
-      track.audioUrl.includes('apple.com') ||
-      track.audioUrl.includes('AudioPreview')
-    ) {
-      // Auto-actualizador: Si es una pista de Apple con recorte de 30s, resolver pista 100% completa en YouTube
-      fetch(`/api/yt/search?q=${encodeURIComponent(`${track.title} ${track.artist}`)}`)
-        .then((r) => r.json())
-        .then((songs: any[]) => {
-          if (songs && Array.isArray(songs) && songs[0] && songs[0].videoId) {
-            track.videoId = songs[0].videoId;
-            track.duration = songs[0].duration || track.duration;
-            this.loadTrack(track, autoPlay);
-          } else {
-            this.playHtml5(track, autoPlay);
-          }
-        })
-        .catch(() => this.playHtml5(track, autoPlay));
-    } else {
-      this.playHtml5(track, autoPlay);
+      return;
     }
+    if (track.audioUrl.includes('itunes.apple.com') || track.audioUrl.includes('audio-ssl.itunes') || track.id.startsWith('apple_')) {
+      // iTunes sólo da 30 s de muestra: se busca la canción completa en YouTube.
+      const token = this.loadToken;
+      fetch(apiUrl(`/api/yt/search?q=${encodeURIComponent(`${track.title} ${track.artist}`)}`))
+        .then((r) => r.json())
+        .then((songs: Track[]) => {
+          if (token !== this.loadToken) return;
+          const hit = Array.isArray(songs) ? songs.find((s) => s.videoId) : undefined;
+          if (hit) this.load({ ...track, videoId: hit.videoId, duration: hit.duration || track.duration }, autoPlay, startAt);
+          else this.playHtml5(track, autoPlay, startAt);
+        })
+        .catch(() => token === this.loadToken && this.playHtml5(track, autoPlay, startAt));
+      return;
+    }
+    this.playHtml5(track, autoPlay, startAt);
   }
 
-  private playHtml5(track: Track, autoPlay: boolean): void {
-    this.isYtActive = false;
-    this.isYtPlaying = false;
-    this.ytBridge.pause();
+  /** Alias para el código que aún lo llama así. */
+  loadTrack(track: Track, autoPlay = true): void {
+    this.load(track, autoPlay);
+  }
+
+  private playHtml5(track: Track, autoPlay: boolean, startAt = 0): void {
+    this.ytActive = false;
+    this.ytPlaying = false;
+    this.yt.pause();
     this.audio.src = track.audioUrl;
     this.audio.load();
-    if (autoPlay) {
-      this.play();
-    } else {
-      this.notify();
-    }
+    // Antes de tener metadatos, currentTime fija la posición de arranque (así lo define HTML).
+    if (startAt > 0) this.audio.currentTime = startAt;
+    if (autoPlay) void this.play();
+    else this.notify();
   }
 
-  public play(): Promise<void> {
-    if (this.isYtActive) {
-      this.isYtPlaying = true;
-      this.ytBridge.play();
+  play(): Promise<void> {
+    if (this.ytActive) {
+      this.ytPlaying = true;
+      this.yt.play();
       this.notify();
       return Promise.resolve();
     }
     return this.audio.play().catch((err) => {
-      console.warn('[AudioEngine] Reproducción pausada por navegador:', err);
+      // Autoplay bloqueado por el navegador: queda en pausa hasta que el conductor toque.
+      console.warn('[AudioEngine] reproducción bloqueada:', err);
+      this.notify();
     });
   }
 
-  public pause(): void {
-    if (this.isYtActive) {
-      this.isYtPlaying = false;
-      this.ytBridge.pause();
+  pause(): void {
+    if (this.ytActive) {
+      this.ytPlaying = false;
+      this.yt.pause();
       this.notify();
       return;
     }
     this.audio.pause();
   }
 
-  public toggle(): void {
-    if (this.isYtActive) {
-      if (this.isYtPlaying) {
-        this.pause();
-      } else {
-        this.play();
-      }
-      return;
-    }
-    if (this.audio.paused) {
-      this.play();
-    } else {
-      this.pause();
-    }
+  toggle(): void {
+    if (this.getState().isPlaying) this.pause();
+    else void this.play();
   }
 
-  public seek(seconds: number): void {
-    if (Number.isNaN(seconds) || seconds < 0) return;
-    if (this.isYtActive) {
-      this.ytBridge.seek(seconds);
+  seek(seconds: number): void {
+    if (!Number.isFinite(seconds) || seconds < 0) return;
+    if (this.ytActive) {
+      this.yt.seek(seconds);
       this.notify();
     } else {
       this.audio.currentTime = seconds;
     }
   }
 
-  public setVolume(level: number): void {
-    const clamped = Math.max(0, Math.min(1, level));
-    this.currentVolume = clamped;
-    this.audio.volume = clamped;
-    this.ytBridge.setVolume(clamped);
+  setVolume(level: number): void {
+    const v = Math.max(0, Math.min(1, level));
+    this.volume = v;
+    this.audio.volume = v;
+    this.yt.setVolume(v);
     this.notify();
   }
 
-  public setOnEnded(handler: () => void): void {
-    this.onEndedCallback = handler;
+  onEnded(handler: () => void): void {
+    this.endedHandler = handler;
+  }
+
+  /** Alias histórico. */
+  setOnEnded(handler: () => void): void {
+    this.onEnded(handler);
+  }
+
+  onError(handler: (track: Track, reason: string) => void): void {
+    this.errorHandler = handler;
   }
 }
 

@@ -1,32 +1,226 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap');
 @import "tailwindcss";
+
+/*
+ * Tipografías v2, empaquetadas (el APK tiene que verse igual sin internet). Elegidas con una
+ * muestra renderizada, no a ojo:
+ *   Anybody (variable, eje de ANCHO 50-150): titulares anchos de carreras y rótulos estrechos
+ *     con la misma familia; el ancho se anima ("las letras se estiran con la velocidad").
+ *   Doto (matriz de puntos): pantallas tipo radio de carro: tiempo, frecuencia, título.
+ *   Hanken Grotesk: texto corrido.
+ * Peso medido (woff2 latin): 56,9 + 6,0 + 34,7 kB = 97,6 kB, menos que los 6 archivos de Barlow.
+ */
+@import "@fontsource-variable/anybody/wdth.css";
+@import "@fontsource-variable/doto/full.css";
+@import "@fontsource-variable/hanken-grotesk";
+
+/*
+ * Sistema "Tablero de noche".
+ * La interfaz es el cuadro de instrumentos de un carro de noche: grafito, luz de instrumento
+ * cian (el azul de la v1, que a Brayan le gustaba) y testigos ámbar/rojo/verde que sólo se
+ * encienden cuando significan algo, como en un tablero real.
+ */
+@theme {
+  --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Anybody Variable", ui-sans-serif, sans-serif;
+  --font-dot: "Doto Variable", ui-monospace, monospace;
+
+  --color-asphalt: #05070a;
+  --color-cabin: #0a0e13;
+  --color-panel: #0f151b;
+  --color-bezel: #161e26;
+  --color-rim: #222d37;
+  --color-ink: #e2f4f9;
+  --color-dim: #8ba2b0;
+  /* #536572 daba 3,04:1 sobre el panel (WCAG AA pide 4,5:1 en texto pequeño): medido en la
+     revisión. #6f8491 da 4,71:1 sobre panel y 5,17:1 sobre asfalto. */
+  --color-faint: #6f8491;
+  --color-cyan: #22d3ee;
+  --color-cyan-soft: #67e8f9;
+  --color-cyan-deep: #0e7490;
+  --color-ice: #cffafe;
+  --color-amber: #ffb020;
+  --color-danger: #ff453a;
+  --color-go: #34d399;
+
+  --ease-cluster: cubic-bezier(0.16, 1, 0.3, 1);
+}
 
 @layer base {
   :root {
-    --app-height: 100dvh;
+    color-scheme: dark;
+    /* Intensidad de la retroiluminación. De noche baja, como el reóstato del tablero: menos
+       deslumbramiento para el conductor (lo pone useNightDim en <html data-night>). */
+    --glow: 1;
     --sat: env(safe-area-inset-top, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
     --sal: env(safe-area-inset-left, 0px);
     --sar: env(safe-area-inset-right, 0px);
   }
 
-  html, body {
-    height: 100%;
-    min-height: 100dvh;
-    width: 100%;
-    background-color: #07080D;
-    color: #F8FAFC;
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    letter-spacing: -0.01em;
-    overflow-x: hidden;
+  html,
+  body {
+    min-height: 100%;
+    background: var(--color-asphalt);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
+    /* clip y no hidden: hidden convierte html/body en contenedor de scroll y anula cualquier
+       position: sticky de la página (lo midió el agente de la portada). */
+    overflow-x: clip;
   }
 
   #root {
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-cyan);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-cyan) 35%, transparent);
+  }
+}
+
+@layer components {
+  /* Anybody por defecto estrecha (como un rótulo de tablero). Los titulares la abren con
+     .type-hero / .type-wide o con font-stretch-[...] de Tailwind. */
+  .font-display {
+    font-stretch: 78%;
+  }
+
+  /* Rótulo de instrumento: mayúsculas estrechas, espaciado amplio. */
+  .label-cluster {
+    font-family: var(--font-display);
+    font-stretch: 70%;
+    font-weight: 650;
+    font-size: 0.72rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-dim);
+  }
+
+  .readout {
+    font-family: var(--font-display);
+    font-stretch: 82%;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+
+  /* Titular de carreras: ancho y pesado. El ancho es animable (font-stretch). */
+  .type-hero {
+    font-family: var(--font-display);
+    font-stretch: 132%;
+    font-weight: 860;
+    line-height: 0.9;
+    letter-spacing: -0.015em;
+    text-transform: uppercase;
+  }
+
+  .type-wide {
+    font-family: var(--font-display);
+    font-stretch: 118%;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  /* Pantalla de radio de carro: matriz de puntos encendida. */
+  .dotmatrix {
+    font-family: var(--font-dot);
+    font-weight: 850;
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ice);
+    text-shadow:
+      0 0 10px rgb(34 211 238 / calc(0.55 * var(--glow))),
+      0 0 2px rgb(34 211 238 / calc(0.9 * var(--glow)));
+  }
+
+  /* Rejilla de píxeles de LCD encima de una pantalla (decorativa). */
+  .lcd-grid::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background-image:
+      linear-gradient(rgb(0 0 0 / 0.22) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(0 0 0 / 0.18) 1px, transparent 1px);
+    background-size: 3px 3px;
+    mix-blend-mode: multiply;
+    opacity: 0.55;
+  }
+
+  /* Aro metálico pulido (biseles, botones físicos). */
+  .bezel {
+    background: conic-gradient(from 200deg, #59697a, #121920 18%, #3a4652 32%, #0e141a 50%, #4b5a68 66%, #11181f 84%, #59697a);
+  }
+
+  /* Barrido de luz ambiente que recorre un borde (como la tira LED de un carro). */
+  .ambient-sweep {
+    position: relative;
+    overflow: hidden;
+  }
+  .ambient-sweep::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    pointer-events: none;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(90deg, transparent 0%, transparent 35%, rgb(34 211 238 / 0.9) 50%, transparent 65%, transparent 100%) 0 0 / 300% 100%;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: sweep 6s linear infinite;
+    opacity: var(--glow);
+  }
+
+  /* Panel de salpicadero: superficie mate con un filo de luz arriba. */
+  .dash-panel {
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.035), transparent 40%),
+      var(--color-panel);
+    border: 1px solid rgb(140 220 255 / 0.07);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 24px 48px -24px rgb(0 0 0 / 0.8);
+  }
+
+  /* Pantalla LCD hundida en el panel. */
+  .lcd {
+    background:
+      radial-gradient(120% 90% at 50% 0%, rgb(34 211 238 / 0.07), transparent 60%),
+      linear-gradient(180deg, #071015, #05090c);
+    border: 1px solid rgb(34 211 238 / 0.12);
+    box-shadow:
+      inset 0 2px 12px rgb(0 0 0 / 0.75),
+      inset 0 0 0 1px rgb(0 0 0 / 0.6);
+  }
+
+  .glow-text {
+    color: var(--color-ice);
+    text-shadow:
+      0 0 12px rgb(34 211 238 / calc(0.55 * var(--glow))),
+      0 0 2px rgb(34 211 238 / calc(0.9 * var(--glow)));
+  }
+
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(34 211 238 / 0.25) transparent;
+  }
+
+  .safe-pad {
     padding-top: var(--sat);
     padding-bottom: var(--sab);
     padding-left: var(--sal);
@@ -34,41 +228,56 @@
   }
 }
 
-/* Scrollbar sutil para interfaces táctiles de cabina */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(6, 182, 212, 0.5);
+/* Textura de piel granulada del salpicadero, muy sutil. */
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
 }
 
-/* Animaciones de Cabina Automotriz */
-@keyframes soundwave-bar {
-  0%, 100% { height: 15%; opacity: 0.5; }
-  50% { height: 100%; opacity: 1; }
+/* Modo noche: el tablero baja su brillo. */
+html[data-night] {
+  --glow: 0.62;
+  --color-ink: #c8dde3;
+  --color-ice: #b8eef6;
 }
 
-@keyframes radar-ripple {
-  0% { transform: scale(0.85); opacity: 0.8; }
-  100% { transform: scale(1.6); opacity: 0; }
+@keyframes sweep {
+  from { background-position: 100% 0; }
+  to { background-position: -200% 0; }
 }
 
-@keyframes cockpit-glow {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.05); }
+@keyframes marquee {
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(var(--marquee-shift, 0px)); }
 }
 
-.animate-radar-ripple {
-  animation: radar-ripple 2.5s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+@keyframes telltale-blink {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0.25; }
 }
 
-.animate-cockpit-glow {
-  animation: cockpit-glow 6s ease-in-out infinite;
+@keyframes ring-breathe {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.04); }
+}
+
+@keyframes scan {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

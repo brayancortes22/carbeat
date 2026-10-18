@@ -1,0 +1,119 @@
+/*
+ * Estilos propios de la portada. Todo lo de color sale de los tokens del sistema (index.css):
+ * cian de instrumento sobre grafito; nada de colores nuevos.
+ */
+
+/* Tarjeta tipo "head-up display": cristal oscuro con esquinas de retícula. */
+.hud-card {
+  position: relative;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.045), transparent 38%),
+    linear-gradient(160deg, rgb(8 22 29 / 0.82), rgb(3 8 11 / 0.78));
+  border: 1px solid rgb(34 211 238 / 0.14);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 30px 60px -30px rgb(0 0 0 / 0.9),
+    0 0 0 1px rgb(0 0 0 / 0.4);
+  backdrop-filter: blur(6px) saturate(1.2);
+  -webkit-backdrop-filter: blur(6px) saturate(1.2);
+}
+
+.hud-card .hud-corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-color: var(--color-cyan);
+  opacity: calc(0.85 * var(--glow));
+  filter: drop-shadow(0 0 4px rgb(34 211 238 / 0.8));
+  pointer-events: none;
+}
+.hud-corner.tl { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; border-top-left-radius: 22px; }
+.hud-corner.tr { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; border-top-right-radius: 22px; }
+.hud-corner.bl { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; border-bottom-left-radius: 22px; }
+.hud-corner.br { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; border-bottom-right-radius: 22px; }
+
+/* Líneas de exploración muy tenues, como un HUD proyectado en el parabrisas. */
+.hud-scan::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: repeating-linear-gradient(180deg, rgb(207 250 254 / 0.025) 0 1px, transparent 1px 4px);
+}
+
+/* Indicador de "desliza": una gota de luz que baja por un riel. */
+.scroll-rail {
+  position: relative;
+  width: 2px;
+  height: 46px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgb(34 211 238 / 0.05), rgb(34 211 238 / 0.3));
+  overflow: hidden;
+}
+.scroll-rail::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--color-ice);
+  box-shadow: 0 0 10px var(--color-cyan);
+  animation: rail-drop 1.9s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes rail-drop {
+  0% { transform: translateY(-16px); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(48px); opacity: 0; }
+}
+
+/* Entrada de la placa: los caracteres se encienden uno a uno como un letrero. */
+.plate-input {
+  background:
+    radial-gradient(120% 140% at 50% 0%, rgb(34 211 238 / 0.09), transparent 60%),
+    linear-gradient(180deg, #0c1820, #061016);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.07),
+    inset 0 0 0 3px rgb(0 0 0 / 0.55),
+    0 0 26px -10px rgb(34 211 238 / 0.7);
+}
+
+/* Barrido de luz sobre una fila de la ficha técnica al "autotestearse". */
+.spec-sweep {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgb(34 211 238 / 0.09) 45%, rgb(207 250 254 / 0.16) 50%, rgb(34 211 238 / 0.09) 55%, transparent);
+}
+
+/* Tarjeta llave del APK: lámina oscura con brillo de cristal y chip. */
+.key-card {
+  background:
+    radial-gradient(120% 90% at 85% 0%, rgb(34 211 238 / 0.16), transparent 55%),
+    radial-gradient(90% 80% at 0% 100%, rgb(14 116 144 / 0.22), transparent 60%),
+    linear-gradient(150deg, #101a22, #070b0f 60%, #0b1117);
+  border: 1px solid rgb(140 220 255 / 0.12);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 40px 80px -40px rgb(0 0 0 / 0.95),
+    0 0 60px -30px rgb(34 211 238 / 0.5);
+}
+.key-chip {
+  background: linear-gradient(135deg, #7b8a96, #2a333b 45%, #8c9aa6 70%, #3a444d);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.5);
+}
+.key-chip::before,
+.key-chip::after {
+  content: '';
+  position: absolute;
+  background: rgb(0 0 0 / 0.35);
+}
+.key-chip::before { left: 33%; top: 0; bottom: 0; width: 1px; box-shadow: 10px 0 0 rgb(0 0 0 / 0.35); }
+.key-chip::after { top: 50%; left: 0; right: 0; height: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-rail::after { animation: none; transform: translateY(16px); opacity: 1; }
+  .hud-card { backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
