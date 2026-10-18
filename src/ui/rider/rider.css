@@ -1,0 +1,364 @@
+/*
+ * Piezas físicas del "control de copiloto" (pasajero web y APK).
+ *
+ * Por qué un .css aparte y no sólo clases de Tailwind: los estados de una tecla real (reposo,
+ * hundida, enclavada e iluminada) y los barridos de radar necesitan keyframes y selectores
+ * por atributo (aria-pressed) que en clases arbitrarias quedarían ilegibles.
+ *
+ * Colores en literal (no var(--color-*)): Tailwind 4 sólo emite las variables de tema que se
+ * usan en sus propias hojas; un literal no depende de eso.
+ * Todo lo animado usa transform u opacity: se compone en la GPU y no repinta en el teléfono.
+ */
+
+/* ------------------------------------------------------------ presintonías */
+
+/* Tecla de presintonía de un radio de carro: goma con recorrido. Al pulsar baja 3 px; la que
+   está activa queda enclavada a medio camino y retroiluminada, como en un radio real. */
+.preset-key {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2px;
+  min-height: 58px;
+  padding: 6px 8px 7px;
+  border-radius: 10px;
+  text-align: left;
+  color: #8ba2b0;
+  background: linear-gradient(180deg, #1d2730 0%, #131a21 55%, #0f151b 100%);
+  border: 1px solid rgb(255 255 255 / 0.07);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.09),
+    0 3px 0 #04070a,
+    0 4px 10px -2px rgb(0 0 0 / 0.7);
+  transform: translateY(0);
+  transition:
+    transform 110ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 110ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 200ms,
+    border-color 200ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.preset-key:hover {
+  color: #e2f4f9;
+  border-color: rgb(34 211 238 / 0.25);
+}
+.preset-key:active {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    inset 0 2px 6px rgb(0 0 0 / 0.6),
+    0 0 0 #04070a;
+}
+.preset-key[aria-pressed='true'] {
+  transform: translateY(2px);
+  color: #cffafe;
+  border-color: rgb(34 211 238 / 0.55);
+  background:
+    radial-gradient(120% 90% at 50% 110%, rgb(34 211 238 / calc(0.3 * var(--glow, 1))), transparent 70%),
+    linear-gradient(180deg, #123542 0%, #0b2029 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    inset 0 0 14px rgb(34 211 238 / calc(0.25 * var(--glow, 1))),
+    0 1px 0 #04070a,
+    0 0 22px -6px rgb(34 211 238 / calc(0.8 * var(--glow, 1)));
+}
+.preset-key .preset-led {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgb(34 211 238 / 0.12);
+  transition: background 200ms, box-shadow 200ms;
+}
+.preset-key[aria-pressed='true'] .preset-led {
+  background: #67e8f9;
+  box-shadow: 0 0 8px rgb(34 211 238 / 0.95);
+}
+
+/* ------------------------------------------------------------------ radar */
+
+/* Haz del radar: un cono de luz que gira. La rotación es un transform (compuesto en GPU). */
+.radar-beam {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 290deg, rgb(34 211 238 / 0.04) 300deg, rgb(34 211 238 / 0.32) 355deg, rgb(207 250 254 / 0.9) 359.5deg, transparent 360deg);
+  animation: radar-spin var(--radar-period, 3s) linear infinite;
+  opacity: var(--glow, 1);
+}
+.radar-beam[data-tone='danger'] {
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 290deg, rgb(255 69 58 / 0.04) 300deg, rgb(255 69 58 / 0.3) 355deg, rgb(255 190 180 / 0.85) 359.5deg, transparent 360deg);
+}
+
+/* Eco: se enciende cuando el haz pasa por su ángulo y se apaga despacio (fósforo de un radar).
+   El retraso lo calcula el componente: ángulo / 360 × periodo. */
+.radar-blip {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 9999px;
+  background: #cffafe;
+  box-shadow: 0 0 10px 2px rgb(34 211 238 / 0.9);
+  opacity: 0;
+  animation: radar-blip var(--radar-period, 3s) linear infinite;
+}
+
+/* Onda de sonar que sale del centro. */
+.radar-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid rgb(34 211 238 / 0.55);
+  opacity: 0;
+  animation: radar-ping 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@keyframes radar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes radar-blip {
+  0% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+  8% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes radar-ping {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.18);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* ------------------------------------------------------- barras de señal */
+
+.signal-bar {
+  transform-origin: bottom;
+  animation: signal-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes signal-rise {
+  from {
+    transform: scaleY(0.1);
+    opacity: 0.2;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* --------------------------------------------------------------- placas */
+
+/* Letras repujadas: luz arriba a la izquierda y sombra abajo, como el metal estampado. */
+.plate-emboss {
+  color: #d9f7fc;
+  text-shadow:
+    0 -1px 0 rgb(255 255 255 / 0.35),
+    0 1px 0 rgb(0 0 0 / 0.95),
+    0 2px 2px rgb(0 0 0 / 0.6),
+    0 0 14px rgb(34 211 238 / calc(0.45 * var(--glow, 1)));
+}
+
+/* Tornillo de placa: cabeza metálica con su ranura. */
+.plate-screw {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #c6d3dc, #5d6c78 45%, #1d252c 80%);
+  box-shadow:
+    0 1px 1px rgb(0 0 0 / 0.8),
+    inset 0 0 0 0.5px rgb(0 0 0 / 0.6);
+}
+.plate-screw::after {
+  content: '';
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 50%;
+  height: 1px;
+  margin-top: -0.5px;
+  background: rgb(0 0 0 / 0.75);
+  transform: rotate(var(--screw-angle, 35deg));
+}
+
+/* Reflejo de unas luces que pasan por la placa, cada 7 s. */
+.plate-glint {
+  background: linear-gradient(100deg, transparent, rgb(207 250 254 / 0.2) 50%, transparent);
+  opacity: 0;
+  animation: plate-glint 7s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+@keyframes plate-glint {
+  0%,
+  70% {
+    transform: translateX(0) skewX(-18deg);
+    opacity: 0;
+  }
+  73% {
+    opacity: 1;
+  }
+  92% {
+    transform: translateX(480%) skewX(-18deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(480%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------- luz ambiente "la pediste tú" */
+
+/* Tira LED a la izquierda de la fila que pediste: respira despacio, como la luz ambiente
+   de un carro. Sólo opacidad: no repinta. */
+.mine-strip {
+  animation: mine-breathe 3.6s ease-in-out infinite;
+}
+
+@keyframes mine-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Destello al subir de puesto en la cola por votos. */
+/* Verde (testigo "go"): la única vez que este color aparece en la cola es para decir "subió".
+   Se anima la opacidad de una capa con la sombra ya pintada, no la sombra: así no repinta. */
+.row-rise {
+  box-shadow:
+    inset 0 0 0 1.5px rgb(52 211 153 / 0.95),
+    inset 0 0 22px -6px rgb(52 211 153 / 0.6),
+    0 0 26px -6px rgb(52 211 153 / 0.85);
+  opacity: 0;
+  animation: row-rise 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes row-rise {
+  0%,
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* --------------------------------------------------------- disco 3D giratorio */
+
+/* El arte de la portada gira despacio mientras suena, como un CD en el reproductor del carro.
+   Se pausa (no se reinicia) cuando la música se pausa. */
+.disc-spin {
+  animation: radar-spin 18s linear infinite;
+}
+.disc-spin[data-paused='true'] {
+  animation-play-state: paused;
+}
+
+/* Brillo del disco: reflejo radial tipo CD, fijo respecto a la luz (no gira con el arte). */
+.disc-sheen {
+  background:
+    conic-gradient(from 110deg, rgb(255 255 255 / 0) 0deg, rgb(207 250 254 / 0.16) 30deg, rgb(255 255 255 / 0) 70deg, rgb(255 255 255 / 0) 180deg, rgb(207 250 254 / 0.12) 215deg, rgb(255 255 255 / 0) 255deg),
+    radial-gradient(circle at 50% 50%, transparent 58%, rgb(0 0 0 / 0.35) 72%, rgb(0 0 0 / 0.55) 100%);
+  mix-blend-mode: screen;
+}
+
+/* ---------------------------------------------------- carretera de la bienvenida */
+
+/* Asfalto en perspectiva con las líneas acercándose. La capa que se mueve sólo se traslada
+   (transform): el teléfono no repinta el degradado en cada fotograma. */
+.road-lines {
+  animation: road-move 0.9s linear infinite;
+}
+
+/* Desplaza exactamente dos periodos de la línea discontinua (2 × 64 px): el bucle no salta. */
+@keyframes road-move {
+  from {
+    transform: translateY(-128px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* Aguja de la mini cuadro de la tarjeta "carro". */
+.mini-needle {
+  transform-box: view-box;
+  transform-origin: 50px 52px;
+  animation: mini-needle 3.2s cubic-bezier(0.45, 0, 0.2, 1) infinite alternate;
+}
+
+@keyframes mini-needle {
+  0% {
+    transform: rotate(-115deg);
+  }
+  55% {
+    transform: rotate(60deg);
+  }
+  100% {
+    transform: rotate(25deg);
+  }
+}
+
+/* Ondas de señal que salen del celular de la tarjeta "pasajero". */
+.signal-wave {
+  transform-origin: 50% 100%;
+  animation: signal-wave 2.2s ease-out infinite;
+  opacity: 0;
+}
+
+@keyframes signal-wave {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-beam,
+  .plate-glint,
+  .disc-spin,
+  .road-lines,
+  .mini-needle,
+  .mine-strip {
+    animation: none !important;
+  }
+  .row-rise {
+    animation: none !important;
+  }
+  .radar-blip,
+  .radar-ping,
+  .signal-wave {
+    animation: none !important;
+    opacity: 0.6;
+  }
+}
