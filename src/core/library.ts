@@ -24,8 +24,7 @@ function readList(key: string, legacy?: string): Track[] {
   try {
     const raw = localStorage.getItem(key) ?? (legacy ? localStorage.getItem(legacy) : null);
     const parsed = raw ? (JSON.parse(raw) as Track[]) : [];
-    // Las favoritas guardadas sólo valen si se pueden volver a reproducir (blob: muere al cerrar).
-    return Array.isArray(parsed) ? parsed.filter((t) => t?.title && (t.videoId || t.audioUrl?.startsWith('http'))) : [];
+    return Array.isArray(parsed) ? parsed.filter((t) => t?.title && (t.videoId || t.audioUrl || t.source)) : [];
   } catch {
     return [];
   }
@@ -39,13 +38,19 @@ function writeList(key: string, list: Track[]): void {
   }
 }
 
-type DirHandle = { name: string; values(): AsyncIterable<{ kind: string; name: string; getFile(): Promise<File> }>; queryPermission(o: { mode: string }): Promise<string> };
+type DirHandle = {
+  name: string;
+  values(): AsyncIterable<{ kind: string; name: string; getFile(): Promise<File> }>;
+  queryPermission(o: { mode: string }): Promise<string>;
+};
 
 function folderDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(FOLDER_DB, 1);
     req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains('watched_folders')) req.result.createObjectStore('watched_folders', { keyPath: 'id' });
+      if (!req.result.objectStoreNames.contains('watched_folders')) {
+        req.result.createObjectStore('watched_folders', { keyPath: 'id' });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -95,12 +100,14 @@ class CarLibrary {
           added++;
           this.set({ local: [...this.state.local, track] });
         }
-      } catch {
-        /* archivo ilegible: se salta */
+      } catch (err) {
+        console.warn('[CarBeat] Archivo no importado:', list[i].name, err);
       }
       this.set({ importing: { done: i + 1, total: list.length } });
     }
-    this.set({ importing: null });
+    // Asegurar refresco completo de la base de datos local
+    const fresh = await LocalAudioDatabase.loadAll();
+    this.set({ local: fresh, importing: null });
     return added;
   }
 
@@ -115,7 +122,6 @@ class CarLibrary {
 
   toggleFavorite(track: Track): boolean {
     const on = !this.isFavorite(track);
-    if (track.source === 'local_car' && !track.audioUrl.startsWith('http')) return false; // ya está en el carro
     const favorites = on ? [track, ...this.state.favorites] : this.state.favorites.filter((t) => !sameTrack(t, track));
     writeList(FAV_KEY, favorites);
     this.set({ favorites });
@@ -142,7 +148,7 @@ class CarLibrary {
     this.set({ history: [] });
   }
 
-  // ------------------------------------------------- carpeta vigilada (escritorio)
+  // ------------------------------------------------- carpeta vigilada (escritorio y USB)
 
   folderSupported(): boolean {
     return typeof window !== 'undefined' && 'showDirectoryPicker' in window;
@@ -170,7 +176,6 @@ class CarLibrary {
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => resolve(undefined);
       });
-      // Sin permiso concedido no se pregunta al arrancar: se espera a que el conductor lo pida.
       if (row?.handle && (await row.handle.queryPermission({ mode: 'read' })) === 'granted') await this.watch(row.handle);
     } catch {
       /* sin carpeta guardada */
@@ -185,19 +190,33 @@ class CarLibrary {
     this.watchTimer = setInterval(() => void this.scanFolder(), 15_000);
   }
 
-  private async scanFolder(): Promise<void> {
-    if (!this.folder) return;
+  /** Rastreo recursivo profundo de todas las subcarpetas de la memoria USB o almacenamiento. */
+  private async crawlDirectory(dir: any, depth = 0): Promise<File[]> {
+    if (depth > 12) return [];
     const files: File[] = [];
     try {
-      for await (const entry of this.folder.values()) {
+      for await (const entry of dir.values()) {
         if (entry.kind === 'file' && isAudioFile(entry)) {
-          const file = await entry.getFile();
-          if (!(await LocalAudioDatabase.hasSource(file))) files.push(file);
+          try {
+            const file = await entry.getFile();
+            if (!(await LocalAudioDatabase.hasSource(file))) files.push(file);
+          } catch {
+            /* ilegible */
+          }
+        } else if (entry.kind === 'directory') {
+          const sub = await this.crawlDirectory(entry, depth + 1);
+          files.push(...sub);
         }
       }
     } catch {
-      return;
+      /* carpeta no accesible */
     }
+    return files;
+  }
+
+  private async scanFolder(): Promise<void> {
+    if (!this.folder) return;
+    const files = await this.crawlDirectory(this.folder);
     if (files.length) await this.importFiles(files);
   }
 }

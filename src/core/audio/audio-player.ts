@@ -3,6 +3,7 @@ import type { PlayerState } from '../../types/player.types';
 import { videoIdOf } from '../../../shared/track';
 import { apiUrl } from '../network/api-config';
 import { YouTubePlayerBridge } from './youtube-player-bridge';
+import { equalizerService } from './equalizer-service';
 
 type PlayerListener = (state: PlayerState) => void;
 
@@ -30,7 +31,11 @@ export class AudioEngine {
 
     const html = () => !this.ytActive && this.notify();
     this.audio.addEventListener('timeupdate', html);
-    this.audio.addEventListener('play', html);
+    this.audio.addEventListener('play', () => {
+      equalizerService.connectSource(this.audio);
+      equalizerService.resumeContext();
+      html();
+    });
     this.audio.addEventListener('pause', html);
     this.audio.addEventListener('loadedmetadata', html);
     this.audio.addEventListener('ended', () => {

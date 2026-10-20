@@ -1,9 +1,11 @@
-export const CARBEAT_VERSION = '2.0.0';
-export const CARBEAT_BUILD_DATE = '2026-10-17';
+export const CARBEAT_VERSION = '2.1.0';
+export const CARBEAT_BUILD_DATE = '2026-10-20';
 export const CARBEAT_RELEASE_NOTES = [
-  'Salas rehechas: el carro es la única fuente de verdad y cada petición cuenta una sola vez',
-  'Token del carro: nadie más puede cerrar la sala ni cambiar la música',
-  'Almacén Upstash Redis en lugar de un cubo público de kvdb.io',
-  'Duraciones reales de YouTube Music y búsqueda unificada',
-  'Diseño de tablero de carro y app Android con interfaz propia',
+  'Blindaje WebGL 2D/3D: detección segura y modo 2D ligero para radios y pantallas de carro sin GPU',
+  'Escáner USB recursivo: detección automática de canciones en subcarpetas de memorias USB',
+  'Solución a guardado local en Android: soporte sin crypto.randomUUID en pantallas chinas y webviews',
+  'Ecualizador Car Audio Pro: control de Bajos, Medios y Agudos con presets automotrices',
+  'Modo Sonar Ya: los pasajeros pueden sonar canciones de una vez sin esperar en la cola',
+  'Envío de MP3 P2P: pasajeros pueden compartir su música descargada directamente a la radio',
+  'Guardado en 1 toque: botón de favorito con confirmación visual para la biblioteca del conductor',
 ];
