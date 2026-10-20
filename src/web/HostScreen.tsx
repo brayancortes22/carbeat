@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Power, QrCode } from 'lucide-react';
+import { Power, QrCode, Sliders } from 'lucide-react';
 import type { Notice } from '../../shared/protocol';
 import { globalAudioEngine } from '../core/audio/audio-player';
 import { carLibrary } from '../core/library';
@@ -19,6 +19,7 @@ import { useWakeLock } from '../ui/useWakeLock';
 import { CabinClock, TelltaleBar, useCabinIgnition, useMediaQuery } from '../ui/car/cabin';
 import { HighwayStrip, HighwayTag } from '../ui/car/HighwayStrip';
 import { useHighwayPref } from '../ui/car/highway-pref';
+import { EqualizerModal } from '../ui/car/EqualizerModal';
 
 type Tab = 'cola' | 'buscar' | 'carro' | 'modos';
 const TABS: { id: Tab; label: string }[] = [
@@ -50,6 +51,7 @@ export function HostScreen({ room, onExit, onRoomChange }: { room: string; onExi
   const lastTrack = useRef<string | null>(null);
   const { showIgnition, ignition, onIgnitionDone } = useCabinIgnition();
   const [highway] = useHighwayPref();
+  const [showEq, setShowEq] = useState(false);
   // Escritorio con alto suficiente: la cabina cabe entera en la pantalla y el cuadro se ajusta
   // al alto que sobra. Por debajo, la página fluye y se desplaza como siempre.
   const fit = useMediaQuery('(min-width: 1024px) and (min-height: 660px)');
@@ -88,6 +90,21 @@ export function HostScreen({ room, onExit, onRoomChange }: { room: string; onExi
     setToasts((t) => [...fresh, ...t].slice(0, 3));
   }, [view]);
   const dismiss = useCallback((id: string) => setToasts((t) => t.filter((x) => x.id !== id)), []);
+
+  const handleToggleFavorite = useCallback(() => {
+    if (!player.currentTrack) return;
+    const isNowFav = carLibrary.toggleFavorite(player.currentTrack);
+    const toastId = 'fav-' + Date.now();
+    const notice = {
+      id: toastId,
+      to: '*',
+      text: isNowFav ? `⭐ «${player.currentTrack.title}» agregada a Mi Música` : `Quitada de Mi Música`,
+      kind: 'info' as const,
+      at: Date.now(),
+    };
+    setToasts((t) => [notice, ...t].slice(0, 3));
+    setTimeout(() => dismiss(toastId), 3000);
+  }, [player.currentTrack, carLibrary, dismiss]);
 
   const riders = view ? Object.entries(view.engine.riders).map(([id, r]) => ({ id, name: r.name })) : [];
   const queue = view?.engine.queue;
@@ -140,6 +157,9 @@ export function HostScreen({ room, onExit, onRoomChange }: { room: string; onExi
         <Key size="sm" variant="primary" onClick={() => setInvite(true)} className="hidden md:inline-flex">
           <QrCode className="h-4 w-4" /> Invitar
         </Key>
+        <Key size="sm" onClick={() => setShowEq(true)} aria-label="Ecualizador Car Audio">
+          <Sliders className="h-4 w-4 text-cyan" /> <span className="hidden sm:inline">Audio</span>
+        </Key>
         <Key size="sm" variant="danger" onClick={() => setConfirmOff(true)} aria-label="Apagar la cabina">
           <Power className="h-4 w-4" /> <span className="hidden sm:inline">Apagar</span>
         </Key>
@@ -175,7 +195,7 @@ export function HostScreen({ room, onExit, onRoomChange }: { room: string; onExi
             // inferior del cristal): se lee como una sola cabina y no como dos tarjetas.
             className={`${fill ? 'min-h-[260px] flex-1' : ''} ${highway ? 'relative z-10 -mt-6' : ''}`}
             favorite={player.currentTrack ? carLibrary.isFavorite(player.currentTrack) : false}
-            onFavorite={() => player.currentTrack && carLibrary.toggleFavorite(player.currentTrack)}
+            onFavorite={handleToggleFavorite}
             onVolume={setVolume}
             onToggle={() => session.toggle()}
             onNext={() => session.next()}
@@ -249,6 +269,7 @@ export function HostScreen({ room, onExit, onRoomChange }: { room: string; onExi
       </main>
 
       <InviteDialog room={view.room} open={invite} onClose={() => setInvite(false)} />
+      {showEq && <EqualizerModal onClose={() => setShowEq(false)} />}
 
       <AnimatePresence>
         {confirmOff && (

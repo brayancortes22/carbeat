@@ -335,12 +335,12 @@ export class HostSession {
     // Una canción del carro llega sólo con su id: se cambia por la pista real (con su URL local).
     if (env.intent.kind === 'request' && env.intent.track.source === 'local_car') {
       const real = this.resolveLocal(env.intent.track.id);
-      if (!real) {
+      if (!real && !env.intent.track.audioUrl?.startsWith('data:')) {
         this.notify(env.from, 'Esa canción ya no está en el carro');
         this.publish();
         return;
       }
-      env = { ...env, intent: { kind: 'request', track: real } };
+      env = { ...env, intent: { kind: 'request', track: real ?? env.intent.track, playNow: env.intent.playNow } };
     }
 
     const res = applyIntent(this.engine, env, { now: Date.now(), current: this.lastPlayer.currentTrack });

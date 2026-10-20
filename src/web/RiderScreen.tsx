@@ -65,10 +65,32 @@ export function RiderScreen({
     setEditing(false);
   };
 
-  const request = (t: Track, from?: Element) => {
+  const [playDirectly, setPlayDirectly] = useState(false);
+  const mp3InputRef = useRef<HTMLInputElement>(null);
+
+  const handleMp3Upload = (file: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').trim();
+      const track: Track = {
+        id: `rider_${Date.now()}`,
+        title: cleanName,
+        artist: view.name || 'Pasajero',
+        audioUrl: dataUrl,
+        duration: 0,
+        source: 'local_car',
+      };
+      request(track, undefined, playDirectly);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const request = (t: Track, from?: Element, playNow = playDirectly) => {
     navigator.vibrate?.(10);
     launchFlight(from, t.coverUrl);
-    void session.request(t);
+    void session.request(t, playNow);
   };
 
   return (
@@ -198,6 +220,42 @@ export function RiderScreen({
                   );
                 })}
               </div>
+            </div>
+
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/5 bg-black/30 p-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-dim">Al pedir:</span>
+                <button
+                  type="button"
+                  onClick={() => setPlayDirectly(!playDirectly)}
+                  className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-bold transition-all ${
+                    playDirectly
+                      ? 'border-go/50 bg-go/20 text-go shadow-[0_0_10px_rgba(48,209,88,0.25)]'
+                      : 'border-cyan/30 bg-cyan/10 text-cyan-soft'
+                  }`}
+                >
+                  {playDirectly ? '▶ Sonar de una vez' : '➕ A la cola'}
+                </button>
+              </div>
+
+              <input
+                ref={mp3InputRef}
+                type="file"
+                accept="audio/*,.mp3,.m4a,.flac,.wav"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleMp3Upload(f);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => mp3InputRef.current?.click()}
+                className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-dim hover:text-ink"
+              >
+                📤 Enviar MP3 local
+              </button>
             </div>
 
             <div className="min-h-[40vh]" role="tabpanel">

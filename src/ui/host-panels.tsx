@@ -61,6 +61,7 @@ type LibTab = 'carro' | 'favoritas' | 'historial';
 export function CarMusicPanel({ lib, onPlay, onQueue }: { lib: LibraryState; onPlay: (t: Track) => void; onQueue: (t: Track) => void }) {
   const [tab, setTab] = useState<LibTab>('carro');
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
   const list = tab === 'carro' ? lib.local : tab === 'favoritas' ? lib.favorites : lib.history;
   const tabs: { id: LibTab; label: string; n: number }[] = [
     { id: 'carro', label: 'En el carro', n: lib.local.length },
@@ -98,12 +99,25 @@ export function CarMusicPanel({ lib, onPlay, onQueue }: { lib: LibraryState; onP
               e.target.value = '';
             }}
           />
+          <input
+            ref={folderRef}
+            type="file"
+            // @ts-expect-error atributo de navegador para subcarpetas
+            webkitdirectory=""
+            directory=""
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) void carLibrary.importFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
           <Key size="sm" variant="primary" onClick={() => fileRef.current?.click()}>
             <Upload className="h-4 w-4" /> Añadir archivos
           </Key>
           {carLibrary.folderSupported() && (
             <Key size="sm" onClick={() => void carLibrary.pickFolder()}>
-              <FolderOpen className="h-4 w-4" /> {lib.folderName ? `Vigilando «${lib.folderName}»` : 'Vigilar una carpeta'}
+              <FolderOpen className="h-4 w-4" /> {lib.folderName ? `USB: «${lib.folderName}»` : 'Escanear USB / Carpeta'}
             </Key>
           )}
         </div>
