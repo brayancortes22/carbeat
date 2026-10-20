@@ -1,10 +1,16 @@
 // Detector seguro y no intrusivo de aceleración gráfica WebGL y pantallas de auto.
 // Esencial para evitar caídas fatales (crash) en radios táctiles Android antiguas con GPUs básicas (Mali, PowerVR).
 
-const STORAGE_KEY = 'carbeat_graphics_mode';
+export const CARBEAT_FORCE_2D_KEY = 'carbeat_graphics_mode';
+const STORAGE_KEY = CARBEAT_FORCE_2D_KEY;
 export type GraphicsMode = 'auto' | '2d' | '3d';
 
 let cachedSupport: boolean | null = null;
+
+/** Reinicia la caché de soporte WebGL (útil para pruebas unitarias y cambios de contexto). */
+export function _resetGraphicsCache(): void {
+  cachedSupport = null;
+}
 
 /**
  * Prueba síncrona y protegida para verificar si el navegador puede crear un contexto WebGL real.

@@ -112,7 +112,11 @@ function toTrack(r: StoredAudio): Track {
 }
 
 export const AUDIO_EXTENSIONS = ['.mp3', '.m4a', '.aac', '.flac', '.wav', '.ogg', '.opus', '.wma', '.mp4'];
-function generateLocalId(): string {
+
+let fallbackCounter = 0;
+
+/** Genera un ID local único sin depender obligatoriamente de crypto.randomUUID (blindaje para radios chinas). */
+export function generateLocalId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     try {
       return `car_${crypto.randomUUID().slice(0, 12)}`;
@@ -120,8 +124,10 @@ function generateLocalId(): string {
       /* fallback */
     }
   }
-  return `car_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  fallbackCounter = (fallbackCounter + 1) & 0xffffff;
+  return `car_${Date.now().toString(36)}_${fallbackCounter.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
+
 export const isAudioFile = (f: { name: string; type?: string }) =>
   (f.type ?? '').startsWith('audio/') || AUDIO_EXTENSIONS.some((e) => f.name.toLowerCase().endsWith(e));
 
