@@ -70,6 +70,14 @@ export function RiderScreen({
 
   const handleMp3Upload = (file: File) => {
     if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      alert('El archivo excede el límite máximo de 25 MB.');
+      return;
+    }
+    if (!/\.(mp3|m4a|wav|flac|aac|ogg|opus|wma)$/i.test(file.name)) {
+      alert('Solo se admiten archivos de audio válidos (.mp3, .m4a, .wav, .flac).');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
