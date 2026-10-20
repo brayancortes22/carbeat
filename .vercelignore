@@ -1,0 +1,8 @@
+android
+node_modules
+.git
+.github
+tests
+dist-app
+dist-server
+*.log
