@@ -39,6 +39,8 @@ export function RiderScreen({
   const colaRef = useRef<HTMLButtonElement>(null);
   const [badge, bump] = useBump();
   const onLand = useCallback((el: Element | null) => el === colaRef.current && bump(), [bump]);
+  const [playDirectly, setPlayDirectly] = useState(false);
+  const mp3InputRef = useRef<HTMLInputElement>(null);
 
   if (!session || !view) return null;
 
@@ -65,8 +67,7 @@ export function RiderScreen({
     setEditing(false);
   };
 
-  const [playDirectly, setPlayDirectly] = useState(false);
-  const mp3InputRef = useRef<HTMLInputElement>(null);
+
 
   const handleMp3Upload = (file: File) => {
     if (!file) return;
