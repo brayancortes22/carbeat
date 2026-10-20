@@ -20,7 +20,7 @@ export type ControlAction = 'toggle' | 'next' | 'prev';
 export type Intent =
   | { kind: 'hello'; name: string }
   | { kind: 'bye' }
-  | { kind: 'request'; track: Track }
+  | { kind: 'request'; track: Track; playNow?: boolean }
   | { kind: 'vote'; queueId: string; value: VoteValue }
   | { kind: 'control'; action: ControlAction };
 

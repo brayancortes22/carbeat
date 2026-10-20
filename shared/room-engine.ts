@@ -98,7 +98,7 @@ export function requestTrack(
   track: Track,
   by: Requester,
   ctx: ApplyContext,
-  opts: { autopilot?: boolean } = {},
+  opts: { autopilot?: boolean; playNow?: boolean } = {},
 ): ApplyResult {
   const autopilot = opts.autopilot === true;
   if (ctx.current && sameTrack(ctx.current, track)) return same(state, [], 'Esa canción ya está sonando');
@@ -122,9 +122,9 @@ export function requestTrack(
   }
 
   const stamped: Track = { ...track, addedBy: by.name };
-  if (!ctx.current) {
+  if (!ctx.current || opts.playNow) {
     // Nada sonando: suena ya, sin pasar por la cola.
-    return { state, effects: [{ type: 'play', track: stamped, requestedBy: by.name }], changed: false };
+    return { state, effects: [{ type: 'play', track: stamped, requestedBy: by.name }], changed: true };
   }
 
   const entry: QueueEntry = {
@@ -188,7 +188,7 @@ export function applyIntent(state: EngineState, env: Envelope, ctx: ApplyContext
       const withRider = base.riders[env.from]
         ? base
         : bump(base, { riders: { ...base.riders, [env.from]: { name: env.name, lastSeen: ctx.now } } });
-      const res = requestTrack(withRider, intent.track, { id: env.from, name: env.name }, ctx);
+      const res = requestTrack(withRider, intent.track, { id: env.from, name: env.name }, ctx, { playNow: intent.playNow });
       return { ...res, changed: res.changed || withRider !== base };
     }
     case 'vote':
