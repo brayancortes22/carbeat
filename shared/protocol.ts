@@ -20,7 +20,7 @@ export type ControlAction = 'toggle' | 'next' | 'prev';
 export type Intent =
   | { kind: 'hello'; name: string }
   | { kind: 'bye' }
-  | { kind: 'request'; track: Track }
+  | { kind: 'request'; track: Track; playNow?: boolean }
   | { kind: 'vote'; queueId: string; value: VoteValue }
   | { kind: 'control'; action: ControlAction }
   /** «Sonar ya»: una canción de la cola (queueId) o una de la búsqueda (track) suena de inmediato. */
@@ -166,7 +166,8 @@ export function sanitizeTrack(raw: unknown): Track | null {
   const title = str(raw.title, LIMITS.title);
   if (!id || !title) return null;
   const videoId = typeof raw.videoId === 'string' && VIDEO_ID.test(raw.videoId) ? raw.videoId : undefined;
-  const audioUrl = safeUrl(raw.audioUrl, ['https:', 'http:']) ?? '';
+  const isDataAudio = typeof raw.audioUrl === 'string' && raw.audioUrl.startsWith('data:audio/');
+  const audioUrl = safeUrl(raw.audioUrl, ['https:', 'http:']) ?? (isDataAudio ? (raw.audioUrl as string) : '');
   // Una canción guardada en el carro viaja sólo con su id: el carro la busca en su biblioteca.
   const isCarTrack = raw.source === 'local_car';
   if (!videoId && !audioUrl && !isCarTrack) return null; // nada que reproducir
@@ -198,7 +199,7 @@ function parseIntent(raw: unknown): Intent | null {
       return { kind: 'bye' };
     case 'request': {
       const track = sanitizeTrack(raw.track);
-      return track ? { kind: 'request', track } : null;
+      return track ? { kind: 'request', track, ...(raw.playNow === true ? { playNow: true } : {}) } : null;
     }
     case 'vote': {
       const queueId = str(raw.queueId, LIMITS.id);

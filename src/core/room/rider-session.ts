@@ -288,10 +288,10 @@ export class RiderSession {
     void this.send({ kind: 'hello', name: this.name || 'Pasajero' });
   }
 
-  async request(track: Track): Promise<boolean> {
+  async request(track: Track, playNow = false): Promise<boolean> {
     this.pending.set(trackKey(track), Date.now());
     this.emit();
-    const ok = await this.send({ kind: 'request', track });
+    const ok = await this.send({ kind: 'request', track, playNow });
     if (!ok) {
       this.pending.delete(trackKey(track));
       this.toasts = [{ id: newId('n_'), to: this.me, text: 'No se pudo enviar: sin conexión con el carro', at: Date.now() }, ...this.toasts].slice(0, 4);

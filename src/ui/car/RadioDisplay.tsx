@@ -65,8 +65,15 @@ export interface RadioDisplayProps {
 export function RadioDisplay({ track, isPlaying, position, duration, requestedBy, favorite = false, onToggle, onNext, onPrev, onFavorite, compact = false }: RadioDisplayProps) {
   const reduce = useReducedMotion();
   const [tuning, setTuning] = useState(false);
+  const [savedToast, setSavedToast] = useState(false);
   const lastId = useRef<string | null>(track?.id ?? null);
   const timer = useRef(0);
+  const handleFav = () => {
+    if (!onFavorite) return;
+    onFavorite();
+    setSavedToast(true);
+    window.setTimeout(() => setSavedToast(false), 2000);
+  };
 
   // El temporizador vive en una ref (no en la limpieza del efecto): si el efecto se repitiera
   // por otra causa con la misma canción, la sintonización se quedaría encendida para siempre.
@@ -89,6 +96,11 @@ export function RadioDisplay({ track, isPlaying, position, duration, requestedBy
 
   return (
     <div className={`lcd relative mx-auto flex w-full max-w-[440px] flex-col overflow-hidden rounded-[22px] ${compact ? 'gap-2 px-3 py-2.5' : 'gap-3.5 p-4'}`}>
+      {savedToast && (
+        <div className="absolute top-2 left-1/2 z-30 -translate-x-1/2 rounded-full border border-cyan/50 bg-[#07131b]/95 px-3.5 py-1 text-xs font-bold text-ice shadow-[0_0_15px_rgba(34,211,238,0.5)]">
+          ⭐ ¡Guardada en Mi Música!
+        </div>
+      )}
       {/* Cabecera de la radio: estado y origen */}
       <div className="flex items-center gap-2">
         <span
@@ -157,7 +169,7 @@ export function RadioDisplay({ track, isPlaying, position, duration, requestedBy
         {onFavorite && (
           <button
             type="button"
-            onClick={onFavorite}
+            onClick={handleFav}
             disabled={!track}
             aria-pressed={favorite}
             aria-label={favorite ? 'Quitar de Mi música' : 'Guardar en Mi música'}

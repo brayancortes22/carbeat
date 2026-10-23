@@ -87,7 +87,7 @@ function probeDuration(blob: Blob): Promise<number> {
       URL.revokeObjectURL(url);
       resolve(Number.isFinite(v) ? Math.round(v) : 0);
     };
-    const timer = setTimeout(() => done(0), 4000);
+    const timer = setTimeout(() => done(0), 800);
     a.preload = 'metadata';
     a.onloadedmetadata = () => {
       clearTimeout(timer);
@@ -111,7 +111,23 @@ function toTrack(r: StoredAudio): Track {
   return { id: r.id, title: r.title, artist: r.artist, album: r.album, duration: r.duration, source: 'local_car', audioUrl: url };
 }
 
-export const AUDIO_EXTENSIONS = ['.mp3', '.m4a', '.aac', '.flac', '.wav', '.ogg', '.opus'];
+export const AUDIO_EXTENSIONS = ['.mp3', '.m4a', '.aac', '.flac', '.wav', '.ogg', '.opus', '.wma', '.mp4'];
+
+let fallbackCounter = 0;
+
+/** Genera un ID local único sin depender obligatoriamente de crypto.randomUUID (blindaje para radios chinas). */
+export function generateLocalId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return `car_${crypto.randomUUID().slice(0, 12)}`;
+    } catch {
+      /* fallback */
+    }
+  }
+  fallbackCounter = (fallbackCounter + 1) & 0xffffff;
+  return `car_${Date.now().toString(36)}_${fallbackCounter.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export const isAudioFile = (f: { name: string; type?: string }) =>
   (f.type ?? '').startsWith('audio/') || AUDIO_EXTENSIONS.some((e) => f.name.toLowerCase().endsWith(e));
 
@@ -138,7 +154,7 @@ export const LocalAudioDatabase = {
 
     const { title, artist } = parseFileName(file.name);
     const record: StoredAudio = {
-      id: `car_${crypto.randomUUID().slice(0, 12)}`,
+      id: generateLocalId(),
       sourceKey: key,
       title,
       artist,

@@ -13,6 +13,8 @@ import { HEADLINE, HEADLINE_ACCENT, STEPS } from './landing/content';
 import { ChapterCard, GearRail } from './landing/Story';
 import { Specs } from './landing/Specs';
 import './landing/landing.css';
+import { canRender3D } from '../core/device/graphics-detector';
+import { ThreeErrorBoundary } from '../ui/three/ThreeErrorBoundary';
 
 const NightDrive = lazy(() => import('../ui/three/NightDrive'));
 
@@ -69,7 +71,7 @@ export function Landing({ onHost, onJoin }: { onHost: () => void; onJoin: (room:
   const [error, setError] = useState<string | null>(null);
   const [nearby, setNearby] = useState<{ room: string; name: string }[] | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [show3D] = useState(canAfford3D);
+  const [show3D] = useState(() => canAfford3D() && canRender3D());
   const [lite] = useState(isLite);
   const reduce = useReducedMotion();
 
@@ -167,7 +169,9 @@ export function Landing({ onHost, onJoin }: { onHost: () => void; onJoin: (room:
       >
           {show3D ? (
             <Suspense fallback={<div className={STATIC_SKY} />}>
-              <NightDrive className="absolute inset-0" chapter={chapter} lite={lite} active={storyOn} />
+              <ThreeErrorBoundary fallback={<div className={STATIC_SKY} />}>
+                <NightDrive className="absolute inset-0" chapter={chapter} lite={lite} active={storyOn} />
+              </ThreeErrorBoundary>
             </Suspense>
           ) : (
             <div className={STATIC_SKY} />

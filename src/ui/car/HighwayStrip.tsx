@@ -3,6 +3,7 @@ import { useReducedMotion } from 'motion/react';
 import type { QueueEntry } from '../../../shared/protocol';
 import type { HighwaySign } from '../three/QueueHighway';
 import { TtIcon } from '../Telltale';
+import { canRender3D } from '../../core/device/graphics-detector';
 import './car.css';
 
 /*
@@ -52,7 +53,7 @@ function useStableSigns(signs: HighwaySign[]): HighwaySign[] {
 
 function canAfford3D(): boolean {
   const c = (navigator as unknown as { connection?: { saveData?: boolean } }).connection;
-  return !c?.saveData;
+  if (c?.saveData) return false; return canRender3D();
 }
 
 class Guard extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
