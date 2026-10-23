@@ -186,6 +186,26 @@ describe('control y presencia', () => {
     expect(r.notice).toMatch(/desactivó/);
   });
 
+  it('«Sonar ya» de un pasajero: apagado por defecto; encendido, saca de la cola o suena una pista nueva', () => {
+    let s = withRiders('ana', 'beto');
+    const q = requestTrack(s, song('a'), { id: 'beto', name: 'beto' }, ctx(playing, 10));
+    s = q.state;
+    const id = s.queue[0].queueId;
+    const off = applyIntent(s, env('ana', { kind: 'play_now', queueId: id }), ctx());
+    expect(off.effects).toEqual([]);
+    expect(off.state.queue).toHaveLength(1);
+    expect(off.notice).toMatch(/no permite/);
+    s = updateSettings(s, { passengerPlayNow: true });
+    const fromQueue = applyIntent(s, env('ana', { kind: 'play_now', queueId: id }), ctx());
+    expect(fromQueue.effects).toEqual([{ type: 'play', track: { ...song('a'), addedBy: 'beto' }, requestedBy: 'beto' }]);
+    expect(fromQueue.state.queue).toHaveLength(0);
+    const gone = applyIntent(fromQueue.state, env('ana', { kind: 'play_now', queueId: id }), ctx());
+    expect(gone.effects).toEqual([]);
+    const fresh = applyIntent(s, env('ana', { kind: 'play_now', track: song('z') }), ctx());
+    expect(fresh.effects).toEqual([{ type: 'play', track: song('z'), requestedBy: 'ana' }]);
+    expect(fresh.state.queue).toHaveLength(1);
+  });
+
   it('saludar de nuevo sólo cambia la foto si cambia el nombre', () => {
     const s = withRiders('ana');
     expect(applyIntent(s, env('ana', { kind: 'hello', name: 'ana' }), ctx()).changed).toBe(false);
