@@ -1,109 +1,121 @@
-# 🚗 CarBeat: Collaborative In-Car Jukebox & DJ System (v2.1.0)
+# 🚗 CarBeat: Collaborative In-Car Jukebox & DJ System (v2.2.0)
 
-Sistema colaborativo de música en tiempo real para vehículos y viajes por carretera. Convierte la pantalla del carro (Tablet, Android Auto, Navegador) en un reproductor central (Host) y permite que los pasajeros se unan como DJs desde sus teléfonos móviles sin descargas obligatorias para proponer, votar canciones y controlar la música de la cabina en vivo.
+> **Desarrollador Principal:** Brayan Stid Cortés Lombana (`bscl`)  
+> **Versión:** 2.2.0 (Producción Oficial)  
+> **Despliegue en Vivo:** [https://carbeat-pi.vercel.app](https://carbeat-pi.vercel.app)
 
----
-
-## 🌟 Novedades de la Versión 2.1.0 (Blindaje Automotriz & Car Audio Pro)
-
-### 1. 🛡️ Blindaje Total WebGL y Modo 2D Ligero Universal
-- **Detección Activa de GPU (`graphics-detector.ts`):** Prueba rápida y segura de contexto WebGL con liberación inmediata (`WEBGL_lose_context`). Si la pantalla de la radio china o tablet carece de aceleración 3D, conmuta de forma transparente al cielo estrellado 2D vectorial sin colgar la máquina.
-- **`ThreeErrorBoundary` Especializado:** Protege las escenas de Three.js / React Three Fiber contra fallos de `Error creating WebGL context` o pérdidas de contexto por suspensión de pantalla.
-- **Recuperación en 1 Clic:** La pantalla de diagnóstico ofrece `[🚗 Entrar en Modo 2D Ligero]` guardando la preferencia permanente en `localStorage` para evitar bucles de recarga infinita.
-
-### 2. 📁 Escáner USB Recursivo Profundo (Soporte Multinivel)
-- **Rastreo Recursivo:** Explora automáticamente todas las carpetas y subcarpetas anidadas en memorias USB (hasta 12 niveles de profundidad) sin requerir que el conductor mueva sus archivos a la raíz.
-- **Compatibilidad Extensa:** Soporta formatos `.mp3`, `.m4a`, `.wma`, `.flac`, `.wav`, `.aac`, `.ogg`, `.opus` con detección insensitive a mayúsculas/minúsculas.
-- **Erradicación del Bug `crypto.randomUUID`:** Reemplazado por `generateLocalId()` de entropía mixta, eliminando fallos en WebViews antiguas de Android o conexiones locales HTTP.
-
-### 3. 🎚️ Ecualizador Car Audio Pro (3 Bandas + Presets)
-- **Filtros Web Audio API Biquad:**
-  - **Bajos (Subwoofer):** Filtro LowShelf calibrado en 80 Hz (-12 dB a +12 dB).
-  - **Medios (Voces):** Filtro Peaking calibrado en 1 kHz (Q: 1.0).
-  - **Agudos (Brillo):** Filtro HighShelf calibrado en 8 kHz.
-- **Presets Automotrices Listos para Usar:** *Plano*, *Bass Boost*, *Subwoofer Extremo*, *Voz Clara*, *Crossover*, *Rock*.
-- **Persistencia y Ergonomía:** Guarda los ajustes del usuario y provee un modal táctil optimizado para operar con guantes o en movimiento.
-
-### 4. ⚡ Modo "Sonar Ya" (Reproducción Directa para Pasajeros)
-- Los pasajeros disponen de un selector intuitivo al pedir canciones: `[▶ Sonar de una vez / ➕ A la cola]`.
-- Al marcar "Sonar Ya", la canción viaja con el flag `playNow: true` en el protocolo v2, saltando la cola y comenzando a reproducirse inmediatamente en los parlantes del carro.
-
-### 5. 📤 Envío Directo de MP3 Locales (P2P Offline)
-- Los pasajeros con canciones descargadas en la memoria de sus teléfonos pueden compartirlas al carro mediante el botón `[📤 Enviar MP3 local]`.
-- El archivo se procesa en el navegador como flujo Base64 y se añade a la reproducción de cabina sin necesidad de conexión a internet.
-
-### 6. ⭐ Guardado Inmediato en Mi Música con Feedback Visual
-- Botón táctil ergonómico de favoritos integrado en el panel principal del conductor.
-- Muestra una notificación visual en tiempo real (*"⭐ «Título» agregada a Mi Música"*) confirmando la persistencia en la biblioteca personal.
+Sistema colaborativo de música en tiempo real para vehículos y viajes por carretera. Convierte la pantalla del carro (Tablet, radio Android china, Android Auto o navegador) en un reproductor central (Host) y permite que los pasajeros se unan como DJs desde sus teléfonos móviles sin instalar aplicaciones pesadas para buscar, pedir, votar canciones y controlar el ambiente musical de la cabina en vivo.
 
 ---
 
-## 🛠️ Arquitectura Técnica de CarBeat
+## 🌟 Novedades de la Versión 2.2.0 (Producción Oficial)
 
-```
-[ Car Screen / Tablet / Host ]
-   ├── EqualizerService (Web Audio API: 80Hz LowShelf, 1kHz Peaking, 8kHz HighShelf)
-   ├── AudioEngine (Híbrido Universal: YouTube Player + Local Audio DB)
-   ├── GraphicsDetector (Detección WebGL + Conmutador Seguro a Modo 2D)
-   ├── RoomEngine & Protocol v2 (Host Autorizado + Estado Monolítico Sincronizado)
-   ├── Upstash Redis Relay & WebSocket Local LAN
-   ├── Recursive Library Crawler (USB & Storage Deep Scan)
-   └── DriverLibrary & PlaybackHistory (Almacenamiento persistente IndexedDB & LocalStorage)
-         ▲
-         │ Sincronización telemática (<20ms local / <150ms cloud)
-         ▼
-[ Mobile Passengers / DJs ]
-   ├── RiderSession (Protocol v2: request con playNow, vote, sync)
-   ├── P2P Audio Uploader (Conversión y streaming de archivos locales)
-   └── Responsive Glassmorphism UI (Diseño optimizado para cualquier smartphone)
+### 1. ⚡ Sonar Ya Dual (Buscador y Cola)
+- **Buscador con Acciones Independientes:** En cada resultado de búsqueda tanto del carro como de los pasajeros, se presentan dos botones de acción claros:
+  - **`[▶ Sonar ya]`**: Salta la cola y envía la pista a reproducirse inmediatamente en los parlantes del vehículo.
+  - **`[+ Cola]`**: Encola la pista respetando el orden y los votos de los pasajeros.
+- **Reproducción Directa en la Cola:** Cada canción encolada dispone de su propio botón `[▶ Sonar ya]` para permitir que el conductor o los pasajeros autorizados adelanten su turno al instante.
+- **Permisos de Sala Configurables:** El conductor puede encender o apagar el permiso de que los pasajeros usen "Sonar Ya" desde el panel de *Modos > Reglas de la sala* (`passengerPlayNow`).
+
+### 2. 🪪 Portada Limpia sin Código Residual
+- **Entrada de Pasajero Vacía por Defecto:** Se eliminó la precarga automática de salas anteriores (`getLastRiderRoom()`).
+- El campo de placa arranca **100% limpio y vacío (`""`)**, mostrando el placeholder `"VIBE-7KQ3"` para que el usuario introduzca el código del carro manualmente o utilice el escaneo de código QR.
+
+### 3. 🛡️ Blindaje WebGL 2D/3D & Soporte para Radios Antiguas (Anti "Fallo en la cabina")
+- **Detección Previa de Hardware (`graphics-detector.ts`):** 
+  - Evalúa la capacidad real de compilación de shaders antes de intentar cargar WebGL.
+  - Detecta pantallas de carro de gama de entrada o hardware embebido modesto (`navigator.deviceMemory <= 2 GB`, CPUs de 4 núcleos lentas).
+  - En radios antiguas o sin GPU dedicada, activa automáticamente el **Modo 2D Ligero Atmosférico** (cero consumo de GPU, carga instantánea, sin bloqueos ni reinicios).
+- **Envoltorio `<ThreeErrorBoundary>`:** Protege la autopista 3D de la cabina (`HighwayStrip.tsx`) y la portada (`Landing.tsx`). Si la GPU pierde contexto durante el viaje, conmuta silenciosamente a los letreros planos 2D sin tumbar la aplicación ni pausar el audio.
+- **Auto-Recuperación en `ErrorBoundary.tsx`:** Si ocurre un fallo gráfico inesperado, persiste `setGraphicsPreference('2d')` de forma inmediata en `localStorage` para erradicar el bucle infinito de reinicios.
+
+### 4. 🎛️ Ecualizador Car Audio Pro (Web Audio API)
+- **Filtros Paramétricos Biquad:**
+  - **Bajos / Subwoofer:** Filtro LowShelf calibrado en 80 Hz (-12 dB a +12 dB).
+  - **Medios / Voces:** Filtro Peaking calibrado en 1 kHz (Q: 1.0).
+  - **Agudos / Brillo:** Filtro HighShelf calibrado en 8 kHz.
+- **Presets Automotrices de 1 Toque:** *Plano*, *Bajo Potente*, *Subwoofer Extremo*, *Voz Clara*, *Discoteca / Crossover*, *Rock / En Vivo*.
+- **Modal Táctil Ergonómico:** Diseñado específicamente con diales y botones grandes para operación rápida en cabina.
+
+### 5. 📁 Escáner USB Recursivo Profundo
+- **Exploración Multinivel:** Recorre hasta 12 niveles de carpetas y subcarpetas anidadas en memorias USB conectadas a la radio del vehículo (`crawlDirectory`).
+- **Soporte de Formatos:** Lee archivos `.mp3`, `.m4a`, `.wma`, `.flac`, `.wav`, `.aac`, `.ogg`, `.opus` sin distinción de mayúsculas.
+- **IDs Universales Sin Fallas:** Implementa `generateLocalId()` de entropía segura sin depender de `crypto.randomUUID`, garantizando compatibilidad con WebViews antiguas de Android y entornos locales HTTP.
+
+### 6. 📤 Envío de MP3 Locales Offline (P2P)
+- Los pasajeros pueden compartir música descargada en sus celulares mediante el botón `[📤 Enviar MP3 local]` sin consumir internet en el carro.
+- Los archivos se transmiten por el canal P2P directo (WebRTC DataChannel / LAN) y se añaden a la cola o al reproductor activo de forma autónoma.
+
+### 7. ⭐ Guardado en 1 Toque para el Conductor
+- Botón de favorito agrandado de alto contraste en el salpicadero (`RadioDisplay.tsx`), visible bajo la luz del sol.
+- Permite al conductor guardar canciones en la memoria local permanente del vehículo con confirmación visual instantánea (*"¡Guardada en Mi Música!"*).
+
+---
+
+## 🏗️ Arquitectura del Sistema (CarBeat v2.2.0)
+
+```mermaid
+flowchart TD
+    subgraph CABINA_HOST ["1. Host (Pantalla del Carro / Tablet / Android Auto)"]
+        H_UI["HostScreen.tsx"] --> G_DET["graphics-detector.ts (Safe WebGL Probe)"]
+        H_UI --> EQ["equalizer-service.ts (Web Audio 3-Bands)"]
+        H_UI --> USB["library.ts (crawlDirectory 12 niveles)"]
+        H_UI --> HW["HighwayStrip.tsx (ThreeErrorBoundary + Fallback 2D)"]
+        H_UI --> RE["room-engine.ts (Motor de Sala y Votos)"]
+    end
+
+    subgraph RED_TRANSPORTE ["2. Red de Transporte Híbrida"]
+        RE <--> P2P["WebRTC DataChannel (PeerJS P2P)"]
+        RE <--> LAN["WebSocket Local LAN (ws://localhost:3001)"]
+        RE <--> RELAY["Relay Upstash Redis / Serverless Cloud"]
+    end
+
+    subgraph PASAJEROS ["3. Pasajeros / DJs (Celulares Móviles)"]
+        R_UI["RiderScreen.tsx"] --> ACT["Búsqueda Dual: [+ Cola] y [▶ Sonar Ya]"]
+        R_UI --> MP3["Envío de MP3 Local (P2P Offline)"]
+        R_UI --> VOTE["Sistema de Voto 1-por-Celular"]
+        ACT --> P2P
+        MP3 --> P2P
+        VOTE --> P2P
+    end
 ```
 
 ---
 
-## 🚀 Puesta en Marcha
+## 🧪 Pruebas y Aseguramiento de Calidad (QA)
 
-### Requisitos
-- Node.js 18+
-- Red Wi-Fi o Hotspot compartido (para uso vehicular)
-- Android Studio / SDK (opcional, para compilar el APK)
+CarBeat cuenta con una suite completa de **86 pruebas automatizadas** que certifican cada componente crítico:
 
-### Instalación de Dependencias
+* `shared/room-engine.test.ts`: Pruebas de cola, motor de votos, piloto automático y flag `playNow`.
+* `shared/protocol.test.ts`: Validación de codificación y decodificación WireMessage.
+* `server/relay.test.ts`: Pruebas de señalización y relay de salas.
+* `tests/qa-functional-engine.test.ts`: Pruebas de integración de audio, favoritos y presets de ecualizador.
+* `tests/qa-hardware-resilience.test.ts`: Pruebas de detección de hardware, simulación de radios sin GPU y recuperación 2D.
+* `tests/qa-security-abuse.test.ts`: Pruebas DevSecOps, saneamiento de payloads XSS y límites de subida de audio.
+
 ```bash
-npm install
-```
-
-### Ejecutar en Desarrollo (Vite)
-```bash
-npm run dev
-```
-
-### Compilación Web y Verificación de Tests
-```bash
+# Ejecutar todas las pruebas
 npm test
+
+# Compilación estricta para producción
 npm run build
-```
-
-### Compilar APK Android
-```bash
 npm run build:app
-npx cap sync android
-cd android
-./gradlew assembleDebug
 ```
 
 ---
 
-## 🚀 Pipeline CI/CD Autónomo & Bypass de Vercel Hobby (Regla 17)
+## 🚀 Despliegue y Flujo de Ramas Git (Regla 4)
 
-CarBeat implementa una arquitectura de integración y despliegue continuo autónomo en GitHub Actions para colaborar sin fricciones ni sobrecostes de proveedor:
+El ciclo de desarrollo sigue el estándar de **3 ramas estrictas**:
+1. `development`: Integración activa y refactorizaciones.
+2. `qa`: Aseguramiento de calidad, staging y validación con los 86 tests.
+3. `main`: Producción oficial desplegada automáticamente en Vercel.
 
-1. **Auto-Aprobación y Fusión de PRs (`auto-approve-merge.yml`):**
-   - Cuando colaboradores autorizados (`vars.AUTO_MERGE_SOURCE_USER`) o PRs con la etiqueta `automerge` envían cambios, el sistema ejecuta validaciones de compilación (`npm run build`).
-   - Si las pruebas pasan, el PR es auto-aprobado a nombre de Brayan usando un Personal Access Token (`PR_AUTOMATION_TOKEN`) y se fusiona automáticamente.
-2. **Despliegue Directo vía Vercel CLI (`deploy-vercel.yml`):**
-   - Al integrarse en `main`, GitHub Actions compila los artefactos y realiza el despliegue a producción mediante `vercel deploy --prebuilt --prod` usando las credenciales del titular (`VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`).
-   - Esto evita los bloqueos de cuentas Hobby de Vercel cuando los commits provienen de múltiples colaboradores.
+```bash
+# Sincronización nativa Android
+npx cap sync android
 
----
-
-Desarrollado con pasión por **Brayan Stid Cortés Lombana (`bscl`)**.
+# Despliegue en producción con Vercel CLI
+npx vercel build --prod
+npx vercel deploy --prebuilt --prod
+```
