@@ -1,96 +1,48 @@
-# CarBeat: Documentación Técnica de Arquitectura
+# CarBeat — Arquitectura (v2)
 
-## 1. Resumen Ejecutivo
-CarBeat es un sistema de reproducción y control musical colaborativo diseñado para entornos de cabina vehicular y eventos sociales. Permite que múltiples usuarios (DJs) interactúen con una pantalla principal (Host/Reproductor) sin depender de conexión a internet constante ni de suscripciones de streaming restrictivas.
+## Idea central
 
-## 2. Componentes del Sistema
-
-### 2.1 Host (Pantalla del Carro / Parlante Principal)
-- **Responsabilidad:** Reproducción continua de audio, custodia de la biblioteca local, almacenamiento de música enviada por pasajeros (`/Music/DJ_Queue`), y difusión del estado de reproducción.
-- **Plataformas Soportadas:** Android Auto / Pantallas Android chinas (APK nativa vía Capacitor), Tablets, Smart TVs y Navegadores en laptops.
-
-### 2.2 Client / DJ (Celulares y Dispositivos de Pasajeros)
-- **Responsabilidad:** Explorar el catálogo disponible, encolar pistas, votar por canciones y enviar pistas nuevas adquiridas con su plan de datos.
-- **Plataformas Soportadas:** 
-  - Android (APK nativa o PWA).
-  - iOS / iPadOS (PWA instantánea vía Safari sin necesidad de sideloading ni App Store).
-  - Web Desktop / Mobile.
-
-## 3. Matriz de Transporte Híbrido
+El **carro** (host) guarda y decide todo: cola, votos, historial, reglas y qué suena. Los
+pasajeros envían **intenciones** y pintan la última **foto** que reciben. El servidor es un buzón:
+no aplica reglas. En la v1 el servidor y el carro aplicaban votos cada uno por su lado (dos
+verdades) y una petición podía contar dos veces; la v2 lo resuelve con un único motor y una id
+por intención. Formatos: [protocol.md](protocol.md).
 
 ```
-                 +---------------------------+
-                 |    ConnectionManager      |
-                 +---------------------------+
-                               |
-         +---------------------+---------------------+
-         |                                           |
-         v                                           v
-+-------------------+                       +-------------------+
-|   LAN Transport   |                       |  Cloud Transport  |
-|  (WebSocket local |                       | (Relay WebSocket  |
-|   192.168.x.x)    |                       |   Server Vercel)  |
-+-------------------+                       +-------------------+
+  Pasajero (celular)                  Carro (tablet / radio / navegador)
+  RiderSession ──intención──►  links: P2P · WebSocket · BroadcastChannel · HTTP  ──► HostSession
+        ▲                                                                              │
+        └──────────────── foto (Snapshot, rev creciente) ◄─────────────────────────────┘
+                                         │ HTTP
+                                         ▼
+                              /api/room (relay.ts) ── Upstash Redis
 ```
 
-- **LAN Directo:** Se activa cuando Host y Client comparten el mismo segmento de red (Hotspot del carro o Wi-Fi doméstico).
-- **Cloud Relay:** Se activa cuando los dispositivos están en redes distintas (ej. pasajero con datos móviles 4G/5G y Host en Wi-Fi o viceversa).
+## Piezas
 
-## 4. Descubrimiento de Hosts (ShareIt-style)
+| Capa | Archivos | Qué hace |
+|---|---|---|
+| Protocolo y reglas | `shared/protocol.ts`, `shared/room-engine.ts`, `shared/room-code.ts` | Tipos, validación de todo lo que entra, motor puro de la sala (pedir, votar, control, «Sonar ya», veto, orden de la cola). Con tests. |
+| Carro | `src/core/room/host-session.ts`, `host-store.ts` | Aplica intenciones, controla el reproductor, publica fotos, piloto automático y guarda la sala en `localStorage` (6 h). |
+| Pasajero | `src/core/room/rider-session.ts` | Envía intenciones, estado de conexión real, extrapola la posición de la canción. |
+| Enlaces | `src/core/room/links.ts`, `relay-client.ts` | PeerJS (WebRTC), WebSocket local, BroadcastChannel y HTTP, con reintentos. |
+| Servidor | `server/relay.ts`, `ws-relay.ts`, `redis.ts`, `handlers.ts`, `yt-music.ts`, `lan-server.ts`; `api/` | Relé HTTP con token del carro, relé WebSocket, Redis (Upstash o memoria), búsqueda de YouTube Music, servidor para red local. |
+| Reproducción | `src/core/audio/` | YouTube IFrame API (con reintentos: en el WebView del APK tardaba 10,3 s en cargar, medido) y audio local. |
+| Música y piloto | `src/core/search.ts`, `library.ts`, `autopilot.ts` | Búsqueda unificada, música del carro, modos Afín / Solo carro / Solo internet / Mezcla / Apagado. |
+| Web | `src/web/` | Portada (escena 3D), cabina del carro y pasajero. |
+| APK | `src/app/` | Modo carro (riel, cajón, inmersivo, horizontal, pantalla encendida, hápticos) y modo pasajero (pestañas abajo, escáner QR con jsQR). |
+| Interfaz | `src/ui/` | Componentes de música, tablero (agujas, testigos, placa), autopista 3D de la cola y escena `three/NightDrive`. Diseño: [design-system.md](design-system.md). |
 
-### 4.1 Protocolo de Anuncio
+## 3D
 
-El Host anuncia su presencia cada 2 segundos a través de WebSocket (`/ws-discovery`) y BroadcastChannel:
+- **Portada** (`src/ui/three/NightDrive.tsx`): geometría procedural, sin modelos ni texturas que
+  descargar; 155–165 FPS en una RTX 4060. Al desmontarla se libera la LUT DFG de three r186, que
+  si no retiene el renderer en cada ida y vuelta (medido: 0,609 → 0,145 MB por ciclo en
+  producción).
+- **Autopista de la cola** (`src/ui/three/QueueHighway.tsx`): letreros de las próximas canciones
+  en la cabina; se puede apagar y cae a letreros planos sin WebGL o con ahorro de datos.
 
-```json
-{
-  "type": "HOST_ANNOUNCE",
-  "roomId": "BEAT-784",
-  "roomName": "Carro BEAT-784",
-  "hostIp": "192.168.100.3",
-  "port": 5173,
-  "djCount": 0,
-  "timestamp": 1729023400000,
-  "announcerId": "ann_1729023400000_abc123"
-}
-```
+## Despliegue
 
-### 4.2 Arquitectura de Conexión
-
-```
-                    Host (Pantalla del Carro)              DJ (Celular)
-                           |                                      |
-                           |  HOST_ANNOUNCE (cada 2s)            |
-                           |----------------------------------->|
-                           |                                      |
-                           |<--- DJ se conecta a hostIp:port ----|
-                           |   /ws-rooms?room=BEAT-784           |
-                           |                                      |
-                           |<--- SYNC_CATALOG {catalog, queue}   |
-                           |   {currentTrack, isPlaying, ...}    |
-                           |                                      |
-```
-
-### 4.3 Componentes de Red
-
-| Módulo | Archivo | Responsabilidad |
-|--------|---------|-----------------|
-| Host Announcer | `src/core/network/host-discovery.ts` | Anuncia presencia del Host cada 2s |
-| Host Scanner | `src/core/network/host-discovery.ts` | Escucha anuncios y muestra hosts encontrados |
-| Room Channel | `src/core/network/room-channel.ts` | Comunicación WebSocket de sala con reconexión |
-| Vite WS Plugin | `vite.config.ts` | Servidor WebSocket integrado en desarrollo |
-
-### 4.4 Endpoints WebSocket
-
-| Endpoint | Propósito | Puerto |
-|----------|-----------|--------|
-| `/ws-rooms` | Comunicación de sala (cola, reproducción, votos) | 5173 |
-| `/ws-discovery` | Descubrimiento de hosts cercanos (estilo ShareIt) | 5173 |
-
----
-
-## 5. Módulos Adicionales de Última Generación
-
-- **LocalScanner (`src/core/audio/local-scanner.ts`):** Permite indexar memorias USB completas y carpetas locales del carro en segundos con nombres limpios y soporte para MP3, FLAC y M4A.
-- **MusicSearchService (`src/core/network/music-search-service.ts`):** Motor de búsqueda global sin necesidad de API Keys para que los pasajeros descubran millones de canciones usando sus datos móviles y las envíen a los parlantes del carro.
-- **CI/CD Autónomo:** Pipeline configurado en `.github/workflows/deploy-vercel.yml` para despliegues continuos a Vercel.
+Vercel (web + funciones `api/`) con Upstash Redis; red local con `npm run lan`; APK con
+Capacitor 8. Ver [DEPLOY.md](DEPLOY.md).

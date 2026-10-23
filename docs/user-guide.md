@@ -1,23 +1,41 @@
-# CarBeat: Guía de Uso Rápido (Tío Sebas & Pasajeros)
+# CarBeat — Guía de uso
 
-## 1. Para el Conductor / Pantalla del Carro (Modo Reproductor)
-1. Abre **CarBeat** en la pantalla Android del carro y selecciona **"Modo Reproductor"**.
-2. La app escaneará automáticamente la música local de la memoria del carro o memoria USB.
-3. En la esquina superior se mostrará el **Código de Sala** (ejemplo: `BEAT-784`) y un **Código QR**.
-4. ¡Listo! Puedes controlar el volumen, ver las canciones y cambiar de pista desde la pantalla táctil.
+## Conductor (pantalla del carro)
 
-## 2. Para los Pasajeros / DJs (Celulares)
+1. Abre CarBeat en la tablet o radio del carro (APK) o en un navegador, y pulsa **Encender el carro**.
+2. Arriba verás la placa con el **código de sala** (p. ej. `VIBE-7KQ3`). **Invitar** muestra el QR.
+3. Pestañas del tablero:
+   - **Cola:** lo que viene. Cada canción tiene **Sonar ya** (▶) y **Quitar** (✕).
+   - **Buscar:** YouTube Music. En cada resultado, **+ Cola** (respeta el turno y los votos) o **Sonar ya** (suena de inmediato).
+   - **Música:** la música guardada en el carro, favoritas e historial.
+   - **Modos:** piloto automático y reglas de la sala.
+4. **Reglas de la sala** (pestaña Modos):
+   - *Los pasajeros controlan la música* — pausar, saltar y volver desde el celular (encendido por defecto).
+   - *Los pasajeros pueden «Sonar ya»* — **apagado por defecto**. Enciéndelo sólo si quieres que cualquiera pueda saltarse la cola.
+   - *Canciones en espera por pasajero* — 4 por defecto.
+5. Si recargas la página o se reinicia la app, la sala vuelve con su cola y la canción en pausa en su segundo (hasta 6 h).
+6. **Apagar** cierra la sala para todos.
 
-### Si tienes iPhone o iPad:
-1. Abre la cámara del iPhone y apunta al código QR de la pantalla del carro (o entra a la web de Vercel e ingresa el código de sala).
-2. Se abrirá la web app al instante en Safari.
-3. Toca *"Unirme como DJ"*, escribe tu nombre y verás toda la música del carro.
-4. Toca cualquier canción para agregarla a la cola o vota por las que ya están para que suenen antes.
+## Pasajeros (celular)
 
-### Si tienes Android:
-1. Puedes usar la versión Web escaneando el QR, o descargar la APK directamente desde la página web de CarBeat para tenerla instalada como app.
+1. Escanea el QR del carro con la cámara, o entra a la web y escribe el código en **Subirme como pasajero** (el campo siempre empieza vacío). **Buscar carros en esta red** lista los carros cercanos.
+2. Escribe tu nombre (opcional): el conductor lo verá junto a lo que pidas.
+3. **Buscar:** busca y pulsa **Pedir**. Si no suena nada, suena al instante; si ya estaba en la cola, sumas tu voto.
+4. **Cola:** vota 👍 o 👎. Una canción con muchos votos en contra sale de la cola.
+5. Si el conductor lo permite, verás también:
+   - los botones **anterior / pausa / siguiente**;
+   - **Sonar ya** (▶) en cada resultado y en cada canción de la cola.
+6. El estado de conexión es real: «Buscando el carro…», «En vivo · red local», «En vivo · por internet»…
 
-### Si quieres poner una canción que el carro NO tiene (pero tú tienes datos móviles):
-1. Toca el botón **"+ Nueva Música"**.
-2. Busca la canción o selecciona un archivo de audio de tu celular.
-3. Tu app la enviará a la pantalla del carro y se agregará automáticamente a la **Carpeta de Pasajeros** para sonar en el carro.
+### iPhone / iPad
+
+Funciona en Safari, sin instalar nada.
+
+### Android
+
+Web, o el APK que se descarga desde la portada (**App Android**). El APK trae escáner QR propio.
+
+## Sin internet en el carro
+
+Con un portátil en el carro y `npm run lan`, los celulares del mismo Wi-Fi o hotspot usan la sala
+sin internet. La búsqueda de YouTube sí necesita internet; la música guardada en el carro no.
