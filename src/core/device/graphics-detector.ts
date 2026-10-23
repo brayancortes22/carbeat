@@ -42,7 +42,26 @@ export function isWebGLAvailable(): boolean {
       return false;
     }
 
-    // 2. Liberar el contexto de inmediato para no agotar el límite de contextos del navegador
+    // 2. Comprobar compilación básica si createShader está implementado (radios con WebGL roto)
+    if (typeof gl.createShader === 'function') {
+      try {
+        const vs = gl.createShader(gl.VERTEX_SHADER);
+        if (vs) {
+          gl.shaderSource(vs, 'void main(){gl_Position=vec4(0,0,0,1);}');
+          gl.compileShader(vs);
+          const compiled = gl.getShaderParameter(vs, gl.COMPILE_STATUS);
+          gl.deleteShader(vs);
+          if (compiled === false) {
+            cachedSupport = false;
+            return false;
+          }
+        }
+      } catch {
+        /* ignorar errores de entorno o sandbox */
+      }
+    }
+
+    // 3. Liberar el contexto de inmediato para no agotar el límite de contextos del navegador
     const loseExt = gl.getExtension('WEBGL_lose_context');
     if (loseExt) {
       loseExt.loseContext();
@@ -88,6 +107,10 @@ export function canRender3D(): boolean {
 
   // Modo auto:
   if (!isWebGLAvailable()) return false;
+
+  // Pantallas de auto y dispositivos modestos (RAM <= 2GB)
+  const nav = (typeof navigator !== 'undefined' ? navigator : {}) as unknown as { deviceMemory?: number };
+  if (nav.deviceMemory && nav.deviceMemory <= 2) return false;
 
   // Red de datos lenta o ahorro de datos
   const c = (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
