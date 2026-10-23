@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { Check, Loader2, Search, X } from 'lucide-react';
+import { Check, Loader2, Play, Search, X } from 'lucide-react';
 import { scoreOf, type LibraryItem, type QueueEntry } from '../../shared/protocol';
 import { trackKey, type Track } from '../../shared/track';
 import { GENRE_SHORTCUTS, searchMusic } from '../core/search';
@@ -124,12 +124,15 @@ export function QueueList({
   queue,
   me,
   onVote,
+  onPlayNow,
   hostActions,
   empty,
 }: {
   queue: QueueEntry[];
   me?: string;
   onVote?: (queueId: string, value: -1 | 0 | 1) => void;
+  /** Pasajeros: «Sonar ya» de una canción de la cola (sólo si el carro lo permite). */
+  onPlayNow?: (queueId: string) => void;
   hostActions?: (entry: QueueEntry) => ReactNode;
   empty: ReactNode;
 }) {
@@ -193,6 +196,11 @@ export function QueueList({
                 action={
                   <div className="flex items-center gap-2">
                     {hostActions?.(e)}
+                    {onPlayNow && (
+                      <Key size="md" variant="ghost" onClick={() => onPlayNow(e.queueId)} aria-label={`Sonar ya ${e.track.title}`}>
+                        <Play className="h-4 w-4" fill="currentColor" /> Sonar ya
+                      </Key>
+                    )}
                     {onVote ? (
                       <Rocker score={scoreOf(e)} mine={mine} onVote={(v) => onVote(e.queueId, v)} />
                     ) : (
@@ -227,6 +235,7 @@ const ResultRow = memo(function ResultRow({
   i,
   pickLabel,
   onPick,
+  onPlayNow,
   animate,
 }: {
   t: Track;
@@ -234,6 +243,7 @@ const ResultRow = memo(function ResultRow({
   i: number;
   pickLabel: string;
   onPick: (t: Track, from?: Element) => void;
+  onPlayNow?: (t: Track) => void;
   animate: boolean;
 }) {
   return (
@@ -248,15 +258,22 @@ const ResultRow = memo(function ResultRow({
         cover={t.coverUrl}
         duration={t.duration}
         action={
-          <Key
-            size="md"
-            variant={st === 'done' ? 'ghost' : 'primary'}
-            disabled={st !== 'idle'}
-            onClick={(e) => onPick(t, coverOf(e.currentTarget))}
-            aria-label={`${pickLabel} ${t.title}`}
-          >
-            {st === 'sending' ? <Loader2 className="h-4 w-4 animate-spin" /> : st === 'done' ? <Check className="h-4 w-4 text-go" /> : pickLabel}
-          </Key>
+          <div className="flex items-center gap-2">
+            {onPlayNow && (
+              <Key size="md" variant="ghost" onClick={() => onPlayNow(t)} aria-label={`Sonar ya ${t.title}`}>
+                <Play className="h-4 w-4" fill="currentColor" /> Sonar ya
+              </Key>
+            )}
+            <Key
+              size="md"
+              variant={st === 'done' ? 'ghost' : 'primary'}
+              disabled={st !== 'idle'}
+              onClick={(e) => onPick(t, coverOf(e.currentTarget))}
+              aria-label={`${pickLabel} ${t.title}`}
+            >
+              {st === 'sending' ? <Loader2 className="h-4 w-4 animate-spin" /> : st === 'done' ? <Check className="h-4 w-4 text-go" /> : pickLabel}
+            </Key>
+          </div>
         }
       />
     </motion.li>
@@ -265,12 +282,15 @@ const ResultRow = memo(function ResultRow({
 
 export function SearchPanel({
   onPick,
+  onPlayNow,
   pickLabel = 'Pedir',
   stateOf,
   autoFocus = false,
 }: {
   /** `from`: elemento de la portada pulsada, por si la pantalla quiere animar el pedido. */
   onPick: (t: Track, from?: Element) => void;
+  /** Si se pasa, cada resultado ofrece además «Sonar ya» (suena de inmediato, sin pasar por la cola). */
+  onPlayNow?: (t: Track) => void;
   pickLabel?: string;
   stateOf?: (t: Track) => PickState;
   autoFocus?: boolean;
@@ -283,6 +303,8 @@ export function SearchPanel({
   // Callback estable para las filas memorizadas (quien usa el panel pasa funciones nuevas en cada render).
   const latestPick = useLatest(onPick);
   const pick = useCallback((t: Track, from?: Element) => latestPick.current(t, from), [latestPick]);
+  const latestPlayNow = useLatest(onPlayNow);
+  const playNow = useCallback((t: Track) => latestPlayNow.current?.(t), [latestPlayNow]);
 
   useEffect(() => {
     const query = debounced.trim();
@@ -331,7 +353,7 @@ export function SearchPanel({
           </p>
           <ul className="flex flex-col gap-1" style={{ perspective: 900 }}>
             {res.tracks.map((t, i) => (
-              <ResultRow key={`${res.q}|${t.id}`} t={t} st={stateOf?.(t) ?? 'idle'} i={i} pickLabel={pickLabel} onPick={pick} animate={!reduce} />
+              <ResultRow key={`${res.q}|${t.id}`} t={t} st={stateOf?.(t) ?? 'idle'} i={i} pickLabel={pickLabel} onPick={pick} onPlayNow={onPlayNow ? playNow : undefined} animate={!reduce} />
             ))}
           </ul>
         </div>

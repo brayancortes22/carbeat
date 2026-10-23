@@ -11,6 +11,11 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[CarBeat] error de interfaz:', error, info.componentStack);
+    const msg = (error.message || '').toLowerCase();
+    if (msg.includes('webgl') || msg.includes('three') || msg.includes('context')) {
+      // Registrar modo 2D preventivo inmediatamente para que el siguiente arranque sea 100% 2D
+      setGraphicsPreference('2d');
+    }
   }
 
   private handleFallback2D = () => {

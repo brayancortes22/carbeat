@@ -304,6 +304,11 @@ export class RiderSession {
     return this.send({ kind: 'vote', queueId, value });
   }
 
+  /** «Sonar ya»: de la cola (queueId) o de la búsqueda (track). Sólo vale si el carro lo permite. */
+  playNow(target: { queueId: string } | { track: Track }): Promise<boolean> {
+    return this.send({ kind: 'play_now', ...target });
+  }
+
   control(action: ControlAction): Promise<boolean> {
     return this.send({ kind: 'control', action });
   }

@@ -1,4 +1,5 @@
-import { Component, lazy, memo, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, memo, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import { ThreeErrorBoundary } from '../three/ThreeErrorBoundary';
 import { useReducedMotion } from 'motion/react';
 import type { QueueEntry } from '../../../shared/protocol';
 import type { HighwaySign } from '../three/QueueHighway';
@@ -56,18 +57,7 @@ function canAfford3D(): boolean {
   if (c?.saveData) return false; return canRender3D();
 }
 
-class Guard extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  componentDidCatch(error: Error) {
-    console.warn('[CarBeat] la autopista 3D no arrancó; se muestran los letreros en plano:', error.message);
-  }
-  render() {
-    return this.state.failed ? this.props.fallback : this.props.children;
-  }
-}
+
 
 // El lienzo 3D sólo se vuelve a pintar si cambian los letreros o la marcha, no con cada
 // segundo de la canción (que sí re-renderiza la cabina).
@@ -129,11 +119,11 @@ export function HighwayStrip({
   return (
     <section className={`hw-windshield relative isolate overflow-hidden ${className}`} aria-label="Autopista de la cola: próximas canciones">
       {canAfford3D() ? (
-        <Guard fallback={flat}>
+        <ThreeErrorBoundary fallback={flat}>
           <Suspense fallback={flat}>
             <Scene signs={signs} moving={moving} calm={reduce} />
           </Suspense>
-        </Guard>
+        </ThreeErrorBoundary>
       ) : (
         flat
       )}
