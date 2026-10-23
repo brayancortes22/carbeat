@@ -41,8 +41,9 @@ export function HostQueuePanel({ view, session }: { view: HostView; session: Hos
         hostActions={(e) => (
           // Apilados: dos botones de 44 px en fila dejaban el título en ~100 px a 390 de ancho.
           <div className="flex flex-col gap-1">
-            <button type="button" onClick={() => session.playNow(e.queueId)} aria-label={`Sonar ya ${e.track.title}`} className="flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl bg-cyan/10 px-2.5 text-xs font-bold text-cyan transition-colors hover:bg-cyan/20">
-              <Play className="h-4 w-4" fill="currentColor" /> Sonar ya
+            <button type="button" onClick={() => session.playNow(e.queueId)} aria-label={`Sonar ya ${e.track.title}`} title="Sonar ya" className="flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl bg-cyan/10 text-xs font-bold text-cyan transition-colors hover:bg-cyan/20 @lg:px-2.5">
+              <Play className="h-4 w-4" fill="currentColor" />
+              <span className="@max-lg:hidden">Sonar ya</span>
             </button>
             <button type="button" onClick={() => session.remove(e.queueId)} aria-label={`Quitar ${e.track.title}`} className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/[0.03] text-dim transition-colors hover:bg-danger/10 hover:text-danger">
               <X className="h-4 w-4" />

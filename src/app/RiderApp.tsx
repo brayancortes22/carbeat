@@ -134,12 +134,12 @@ export function RiderApp({ room, onLeave }: { room: string; onLeave: () => void 
               transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
             >
               {tab === 'ahora' && <NowPage view={view} session={session} onOpenQueue={() => go('cola')} />}
-              {tab === 'buscar' && <SearchPanel onPick={request} onPlayNow={canPlayNow ? (t) => void session.playNow({ track: t }) : undefined} stateOf={stateOf} />}
+              {tab === 'buscar' && <SearchPanel onPick={request} onPlayNow={canPlayNow ? (t) => { void native.haptic('success'); void session.playNow({ track: t }); } : undefined} stateOf={stateOf} />}
               {tab === 'cola' && (
                 <QueueList
                   queue={snap?.queue ?? []}
                   me={view.me}
-                  onPlayNow={canPlayNow ? (q) => void session.playNow({ queueId: q }) : undefined}
+                  onPlayNow={canPlayNow ? (q) => { void native.haptic('success'); void session.playNow({ queueId: q }); } : undefined}
                   onVote={(q, v) => {
                     void native.haptic('select');
                     void session.vote(q, v);

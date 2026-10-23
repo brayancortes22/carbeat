@@ -1,5 +1,33 @@
 # CarBeat — Registro de Versiones y Changelog Oficial
 
+## [Sin publicar] — 2026-10-22
+
+### Añadido
+- **«Sonar ya» en el carro:** cada resultado del buscador (web y APK) tiene «+ Cola» y «Sonar ya»; en la cola, «Sonar ya» y «Quitar».
+- **«Sonar ya» para pasajeros:** intención `play_now` (con `queueId` o `track`) y regla de la sala *Los pasajeros pueden «Sonar ya»*, **apagada por defecto**. Encendida, la canción suena de inmediato y queda «PIDIÓ PASAJERO».
+
+### Cambiado
+- La portada ya no rellena el campo de código con la última sala: arranca vacío con el ejemplo `VIBE-7KQ3`.
+- Los botones «Sonar ya» se ajustan al ancho de la lista (container queries): sólo icono en columnas estrechas. A 1024×600 el título del buscador de la cabina pasa de 95 a 174 px; a 390 px, los textos cortados en el buscador del pasajero bajan de 20 a 4.
+- Documentación reescrita para la v2 (README, arquitectura, protocolo, API del relé, despliegue y guía).
+
+## [v2.0.0] — 2026-10-17
+
+### Salas rehechas
+- El carro es la **única fuente de verdad**; los pasajeros envían intenciones con id única (una petición ya no cuenta dos veces) y reciben fotos con revisión.
+- Token del carro (sólo se guarda el hash) para crear, publicar y cerrar la sala.
+- Relé HTTP sin estado propio sobre **Upstash Redis** (antes, un cubo público de kvdb.io). Coste medido en reposo con 1 carro y 3 pasajeros: 135 comandos/min sólo HTTP, 58/min con P2P.
+- Enlaces P2P, WebSocket local, BroadcastChannel y HTTP con reintentos; estado de conexión real.
+- La sala sobrevive a una recarga: cola, votos, historial, reglas, piloto y canción con su posición (6 h).
+- Servidor de red local `npm run lan` (sustituye a `server/ws-server.mjs`, que no arrancaba).
+
+### Interfaz
+- Diseño «Cabina de noche»: portada con escena 3D, cuadro con agujas, testigos y placa; autopista 3D de la cola.
+- APK con modo carro y modo pasajero propios, escáner QR con jsQR (APK debug 8,6 MB frente a 37,8 MB con el escáner oficial) y minSdk 26.
+- YouTube suena dentro del APK: `iframe_api` tardaba 10,3 s en cargar y ahora se reintenta.
+- Accesibilidad: contraste del gris tenue 3,04:1 → 4,71:1, objetivos táctiles de 44 px.
+- Fuga de memoria al ir y volver portada 3D ↔ cabina: cada vuelta retenía el renderer de three (LUT DFG). En producción, 12 ciclos: **0,609 → 0,145 MB por ciclo** y los contextos WebGL vivos dejan de crecer (1→12 → fijo en 1).
+
 ## [v1.5.0] — 2026-10-17
 ### 📂 Auto-Detección y Vigilancia Persistente de Carpeta de Música
 1. **Servicio `FolderWatcherService`:**

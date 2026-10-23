@@ -1,111 +1,54 @@
-# CarBeat — Protocolo de Sala y Mensajería (RoomProtocol v1.1)
+# CarBeat — API HTTP del relé (`/api/room`)
 
-[[README]]
+Código: [`server/relay.ts`](../server/relay.ts). El relé **no decide nada** sobre la música: guarda
+la última foto del carro y una bandeja de intenciones de los pasajeros. Es el respaldo cuando el
+P2P no conecta (redes móviles con NAT estricto, WebViews sin WebRTC). Formato de los mensajes:
+[protocol.md](protocol.md).
 
----
+Almacén: Upstash Redis REST si hay `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`
+(o `KV_REST_API_URL` / `KV_REST_API_TOKEN`); si no, memoria (sólo una instancia: desarrollo y LAN).
 
-## 📦 Formato de Trama (Payload)
+## Seguridad
 
-Todas las tramas son objetos JSON serializados en UTF-8:
+Crear, publicar, leer la bandeja y cerrar exigen el **token del carro**; sólo se guarda su hash.
+Un pasajero sólo puede dejar intenciones, que el carro valida otra vez con el motor de la sala.
 
-```json
-{
-  "type": "NOMBRE_DEL_EVENTO",
-  "roomId": "BEAT-784",
-  "senderId": "uuid-v4-del-cliente",
-  "senderName": "Sebas",
-  "timestamp": 1729023400000,
-  "payload": {}
-}
-```
+## GET `/api/room?op=…`
 
----
+| `op` | Parámetros | Respuesta |
+|---|---|---|
+| `state` (por defecto) | `room`, `rev?` | `{ exists, snapshot, age }`; `{ exists: true, unchanged: true, rev, age }` si `rev` coincide; `{ exists: false, closed }` si no hay sala. |
+| `library` | `room` | `{ library }` (índice de la música del carro o `null`). |
+| `nearby` | — | `{ rooms: [{ room, name }] }`: carros con actividad desde la misma IP pública en los últimos 90 s (hasta 10) («Buscar carros en esta red»). |
+| `health` | — | `{ ok: true, store: 'upstash' \| 'memory' }`. |
 
-## 📡 Catálogo de Eventos
+## POST `/api/room` (JSON)
 
-| Evento | Origen | Destino | Descripción | Payload Requerido |
-|--------|--------|---------|-------------|-------------------|
-| `ROOM_JOIN` | DJ | Host | Petición para unirse a la sala | `{ djName: string }` |
-| `DJ_HEARTBEAT` | DJ | Host / Nube | Latido de presencia cada 3s para conteo real | `{ djName: string }` |
-| `ROOM_LEAVE` | DJ | Host / Nube | Salida limpia del DJ | `{ djName: string }` |
-| `SYNC_CATALOG` | Host → DJ | DJ | Catálogo, cola deduplicada y estado | `{ catalog, queue, currentTrack, isPlaying, currentTime, duration }` |
-| `PLAYBACK_STATE` | Host → Todos | Todos | Estado de reproducción cada 1s | `{ isPlaying, currentTime, duration, currentTrack }` |
-| `QUEUE_TRACK` | DJ → Host | Host | Solicitud de encolar pista (suma votos si ya existe) | `{ track: Track, requestedBy: string }` |
-| `VOTE_TRACK` | DJ → Host | Host | Votar (+1/-1) por canción en cola | `{ queueId: string, delta: number }` |
-| `NEW_TRACK_OFFER` | DJ → Host | Host | Nueva canción ofrecida por pasajero | `{ track: Track }` |
-| `HOST_ANNOUNCE` | Host → Descubrimiento | DJs / Nube | Anuncio de presencia del Host cada 2.5s | `{ roomId, roomName, hostIp, port, djCount, timestamp }` |
+| `op` | Cuerpo | Respuesta |
+|---|---|---|
+| `claim` | `room`, `token`, `name?` | Crea la sala o la renueva con el mismo token. `409` si el código ya es de otro carro. |
+| `sync` | `room`, `token`, `snapshot?`, `library?` | Publica foto y/o biblioteca y devuelve `{ ok, intents }` (hasta 50 de la bandeja). |
+| `push` | `envelope` | Deja una intención en la bandeja (máx. 100). `202`; `404` sin carro; `410` sala cerrada. |
+| `close` | `room`, `token` | Cierra la sala. |
 
----
+## Errores
 
-## 🔌 Endpoints de Sincronización y Descubrimiento
+`400` código o mensaje inválido · `401` falta el token · `403` token incorrecto · `404` sala
+inexistente o caducada · `405` método · `409` código en uso · `410` cerrada · `413` demasiado grande
+(envelope 8 KiB, foto 96 KiB, biblioteca 120 KiB) · `502` almacén no disponible.
 
-| Endpoint | Protocolo | Propósito |
-|----------|-----------|-----------|
-| `/api/room?action=discover` | HTTP GET | Descubrimiento de hosts/carros activos en la nube |
-| `/api/room?roomId=XXX` | HTTP GET | Verificación de existencia de sala y estado vivo |
-| `/api/room` | HTTP POST | Relay Serverless de eventos (`HOST_ANNOUNCE`, `QUEUE_TRACK`, `DJ_HEARTBEAT`, etc.) |
-| `/ws-rooms` | WebSocket | Comunicación de sala de baja latencia en red local (5173) |
-| `/ws-discovery` | WebSocket | Descubrimiento local en red Wi-Fi (5173) |
+## Caducidad
 
----
+Si el carro deja de publicar **2 min**, la sala desaparece sola. Una sala cerrada se recuerda
+10 min (para avisar «el conductor cerró la sala»); la lista de cercanos, 5 min.
 
-## 🎵 Tipos de Datos
+## Ritmo del carro por HTTP
 
-### Track
-```typescript
-{
-  id: string;
-  title: string;
-  artist: string;
-  album?: string;
-  duration: number;      // segundos
-  source: 'local_car' | 'passenger_dj' | 'online';
-  coverUrl: string;
-  audioUrl: string;
-  addedBy?: string;
-}
-```
+Sincroniza cada 5 s; durante 1 min después de recibir una intención por HTTP baja a 1,5 s (hay un
+pasajero que depende de ese camino). Si la foto no cambia, sólo la renueva cada 40 s. Coste medido en reposo (60 s, 1 carro + 3 pasajeros): sólo HTTP
+**135 comandos de Redis/min**; con P2P activo **58/min**. El plan gratis de Upstash da 500.000
+comandos al mes.
 
-### QueueItem
-```typescript
-{
-  queueId: string;
-  track: Track;
-  votes: number;
-  requestedBy: string;
-  requestedAt: number;   // timestamp
-}
-```
+## Otras rutas
 
----
-
-## 🔄 Flujo de Sincronización
-
-```
-DJ (celular)                              Host (pantalla del carro)
-     |                                          |
-     |---- ROOM_JOIN {djName} ---------------->|
-     |                                          |
-     |<--- SYNC_CATALOG {catalog, queue, state}|
-     |                                          |
-     |---- QUEUE_TRACK {track, requestedBy} --->|
-     |                                          |
-     |<--- SYNC_CATALOG {updatedQueue} ---------|
-     |                                          |
-     |<--- PLAYBACK_STATE {isPlaying, time} ----| (cada 1s)
-     |                                          |
-```
-
----
-
-## ⚠️ Reglas de Conexión
-
-1. **El DJ debe conocer la IP del host** para conectarse por red remota
-2. **BroadcastChannel solo funciona en el mismo dispositivo** (mismo navegador)
-3. **WebSocket es el único canal entre dispositivos diferentes**
-4. **Reconexión automática:** Si el WebSocket se cae, se reintenta cada 1.5s
-5. **Cola de reintentos:** Si el socket está conectando, los mensajes se encolan y se envían al abrir
-
----
-
-> 💡 **Tip para Obsidian:** Esta nota se conecta a `[[README]]` y documenta el protocolo actualizado después de las correcciones de sincronización.
+`/api/yt/search?q=` y `/api/yt/related` (búsqueda y afines de YouTube Music) · `/api/version`.

@@ -146,7 +146,7 @@ export function QueueList({
 
   if (!queue.length) return <div className="px-2 py-10 text-center">{empty}</div>;
   return (
-    <ol className="relative flex flex-col gap-1" aria-label="Cola de canciones" style={{ perspective: 900 }}>
+    <ol className="@container relative flex flex-col gap-1" aria-label="Cola de canciones" style={{ perspective: 900 }}>
       {/* popLayout: la fila que sale (pasó a sonar) deja el hueco al instante y las demás suben
           animadas. Sin él, la fila invisible ocupaba sitio hasta acabar su animación; en una
           pestaña en segundo plano (sin requestAnimationFrame) el hueco se quedaba (visto en captura). */}
@@ -197,8 +197,9 @@ export function QueueList({
                   <div className="flex items-center gap-2">
                     {hostActions?.(e)}
                     {onPlayNow && (
-                      <Key size="md" variant="ghost" onClick={() => onPlayNow(e.queueId)} aria-label={`Sonar ya ${e.track.title}`}>
-                        <Play className="h-4 w-4" fill="currentColor" /> Sonar ya
+                      <Key size="md" variant="ghost" onClick={() => onPlayNow(e.queueId)} aria-label={`Sonar ya ${e.track.title}`} title="Sonar ya" className="shrink-0 @max-lg:w-11 @max-lg:px-0">
+                        <Play className="h-4 w-4" fill="currentColor" />
+                        <span className="@max-lg:hidden">Sonar ya</span>
                       </Key>
                     )}
                     {onVote ? (
@@ -260,8 +261,9 @@ const ResultRow = memo(function ResultRow({
         action={
           <div className="flex items-center gap-2">
             {onPlayNow && (
-              <Key size="md" variant="ghost" onClick={() => onPlayNow(t)} aria-label={`Sonar ya ${t.title}`}>
-                <Play className="h-4 w-4" fill="currentColor" /> Sonar ya
+              <Key size="md" variant="ghost" onClick={() => onPlayNow(t)} aria-label={`Sonar ya ${t.title}`} title="Sonar ya" className="shrink-0 @max-lg:w-11 @max-lg:px-0">
+                <Play className="h-4 w-4" fill="currentColor" />
+                <span className="@max-lg:hidden">Sonar ya</span>
               </Key>
             )}
             <Key
@@ -351,7 +353,7 @@ export function SearchPanel({
           <p className="label-cluster mb-2 px-1" aria-live="polite">
             {res.tracks.length ? `${res.tracks.length} resultados${res.source === 'respaldo' ? ' · fuente de respaldo' : ''}` : 'Sin resultados'}
           </p>
-          <ul className="flex flex-col gap-1" style={{ perspective: 900 }}>
+          <ul className="@container flex flex-col gap-1" style={{ perspective: 900 }}>
             {res.tracks.map((t, i) => (
               <ResultRow key={`${res.q}|${t.id}`} t={t} st={stateOf?.(t) ?? 'idle'} i={i} pickLabel={pickLabel} onPick={pick} onPlayNow={onPlayNow ? playNow : undefined} animate={!reduce} />
             ))}
