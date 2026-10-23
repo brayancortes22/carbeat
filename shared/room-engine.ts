@@ -59,7 +59,7 @@ export interface Requester {
 
 export const HOST_ID = 'host';
 export const AUTOPILOT_ID = 'autopilot';
-export const DEFAULT_SETTINGS: RoomSettings = { passengerControl: true, maxPendingPerRider: 4 };
+export const DEFAULT_SETTINGS: RoomSettings = { passengerControl: true, passengerPlayNow: false, maxPendingPerRider: 4 };
 export const HISTORY_SIZE = 12;
 /** Debe ser holgado frente al saludo HTTP del pasajero (cada 25 s). */
 export const RIDER_TIMEOUT_MS = 60_000;
@@ -196,6 +196,17 @@ export function applyIntent(state: EngineState, env: Envelope, ctx: ApplyContext
     case 'control':
       if (!base.settings.passengerControl) return same(base, [], 'El conductor desactivó el control de los pasajeros');
       return same(base, [{ type: intent.action }]);
+    case 'play_now': {
+      if (!base.settings.passengerPlayNow) return same(base, [], 'El conductor no permite «Sonar ya» a los pasajeros');
+      if (intent.queueId) {
+        const taken = takeEntry(base, intent.queueId);
+        if (!taken.entry) return same(base, [], 'Esa canción ya no está en la cola');
+        return { state: taken.state, effects: [{ type: 'play', track: taken.entry.track, requestedBy: taken.entry.requestedBy }], changed: true };
+      }
+      if (!intent.track) return same(base);
+      const who = base.riders[env.from]?.name ?? env.name;
+      return { state: bump(base, {}), effects: [{ type: 'play', track: intent.track, requestedBy: who }], changed: true };
+    }
     default:
       return same(base);
   }

@@ -59,6 +59,7 @@ export function loadHostState(room: string, now = Date.now()): SavedHost | null 
     history: Array.isArray(raw.history) ? raw.history.map(sanitizeTrack).filter((t): t is Track => !!t) : [],
     settings: {
       passengerControl: typeof s.passengerControl === 'boolean' ? s.passengerControl : DEFAULT_SETTINGS.passengerControl,
+      passengerPlayNow: typeof s.passengerPlayNow === 'boolean' ? s.passengerPlayNow : DEFAULT_SETTINGS.passengerPlayNow,
       maxPendingPerRider: typeof s.maxPendingPerRider === 'number' ? s.maxPendingPerRider : DEFAULT_SETTINGS.maxPendingPerRider,
     },
     autopilot: AUTOPILOT_MODES.find((m) => m.id === raw.autopilot)?.id ?? 'hybrid',

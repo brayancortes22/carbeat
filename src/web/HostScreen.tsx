@@ -234,7 +234,8 @@ export function HostScreen({ room, onExit, onRoomChange }: { room: string; onExi
             {tab === 'cola' && <HostQueuePanel view={view} session={session} />}
             {tab === 'buscar' && (
               <SearchPanel
-                pickLabel="Poner"
+                pickLabel="+ Cola"
+                onPlayNow={(tr) => session.playTrackNow(tr)}
                 stateOf={(tr) => (queuedKeys.has(keyOf(tr)) || (player.currentTrack && keyOf(player.currentTrack) === keyOf(tr)) ? 'done' : 'idle')}
                 onPick={(tr) => {
                   const notice = session.request(tr);

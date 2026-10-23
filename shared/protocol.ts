@@ -22,7 +22,9 @@ export type Intent =
   | { kind: 'bye' }
   | { kind: 'request'; track: Track }
   | { kind: 'vote'; queueId: string; value: VoteValue }
-  | { kind: 'control'; action: ControlAction };
+  | { kind: 'control'; action: ControlAction }
+  /** «Sonar ya»: una canción de la cola (queueId) o una de la búsqueda (track) suena de inmediato. */
+  | { kind: 'play_now'; queueId?: string; track?: Track };
 
 export interface Envelope {
   /** Único por mensaje: deduplica entre transportes. */
@@ -64,6 +66,8 @@ export interface NowPlaying {
 export interface RoomSettings {
   /** Los pasajeros pueden pausar y saltar. */
   passengerControl: boolean;
+  /** Los pasajeros pueden saltarse la cola con «Sonar ya». Apagado por defecto: se salta la votación. */
+  passengerPlayNow: boolean;
   /** Canciones pendientes por pasajero; evita que uno solo llene la cola. */
   maxPendingPerRider: number;
 }
@@ -206,6 +210,12 @@ function parseIntent(raw: unknown): Intent | null {
       const action = raw.action;
       if (action !== 'toggle' && action !== 'next' && action !== 'prev') return null;
       return { kind: 'control', action };
+    }
+    case 'play_now': {
+      const queueId = str(raw.queueId, LIMITS.id);
+      if (queueId) return { kind: 'play_now', queueId };
+      const track = sanitizeTrack(raw.track);
+      return track ? { kind: 'play_now', track } : null;
     }
     default:
       return null;

@@ -22,21 +22,21 @@ describe('host-store', () => {
       rev: 7,
       queue: [{ queueId: 'q1', track: song, requestedBy: 'Ana', requestedById: 'c1', requestedAt: 1, autopilot: false, votes: { c2: 1 } }],
       history: [song],
-      settings: { passengerControl: false, maxPendingPerRider: 2 },
+      settings: { passengerControl: false, passengerPlayNow: true, maxPendingPerRider: 2 },
       autopilot: 'local',
       now: { track: song, position: 83.4, requestedBy: 'Ana' },
     });
     const s = loadHostState('ABC-1234');
     expect(s?.rev).toBe(7);
     expect(s?.queue[0].votes).toEqual({ c2: 1 });
-    expect(s?.settings).toEqual({ passengerControl: false, maxPendingPerRider: 2 });
+    expect(s?.settings).toEqual({ passengerControl: false, passengerPlayNow: true, maxPendingPerRider: 2 });
     expect(s?.autopilot).toBe('local');
     expect(s?.now?.position).toBe(83.4);
     expect(loadHostState('OTRA-0000')).toBeNull();
   });
 
   it('descarta lo viejo, lo roto y lo cerrado', () => {
-    saveHostState('ABC-1234', { rev: 1, queue: [], history: [], settings: { passengerControl: true, maxPendingPerRider: 4 }, autopilot: 'hybrid', now: null });
+    saveHostState('ABC-1234', { rev: 1, queue: [], history: [], settings: { passengerControl: true, passengerPlayNow: false, maxPendingPerRider: 4 }, autopilot: 'hybrid', now: null });
     expect(loadHostState('ABC-1234', Date.now() + 7 * 3600_000)).toBeNull();
     mem.set('carbeat.host-state.v2.ROTO-0000', '{no es json');
     expect(loadHostState('ROTO-0000')).toBeNull();

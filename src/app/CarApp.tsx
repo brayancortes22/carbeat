@@ -313,7 +313,11 @@ function Cabin({ room, onOff }: { room: string; onOff: () => void }) {
                   {panel === 'cola' && <HostQueuePanel view={view} session={session} />}
                   {panel === 'buscar' && (
                     <SearchPanel
-                      pickLabel="Poner"
+                      pickLabel="+ Cola"
+                      onPlayNow={(tr) => {
+                        void native.haptic('success');
+                        session.playTrackNow(tr);
+                      }}
                       stateOf={(tr) => (queuedKeys.has(keyOf(tr)) ? 'done' : 'idle')}
                       onPick={(tr) => {
                         void native.haptic('success');
