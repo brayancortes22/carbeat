@@ -41,8 +41,8 @@ export function HostQueuePanel({ view, session }: { view: HostView; session: Hos
         hostActions={(e) => (
           // Apilados: dos botones de 44 px en fila dejaban el título en ~100 px a 390 de ancho.
           <div className="flex flex-col gap-1">
-            <button type="button" onClick={() => session.playNow(e.queueId)} aria-label={`Poner ya ${e.track.title}`} className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/[0.03] text-dim transition-colors hover:bg-cyan/10 hover:text-cyan">
-              <Play className="h-4 w-4" fill="currentColor" />
+            <button type="button" onClick={() => session.playNow(e.queueId)} aria-label={`Sonar ya ${e.track.title}`} className="flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl bg-cyan/10 px-2.5 text-xs font-bold text-cyan transition-colors hover:bg-cyan/20">
+              <Play className="h-4 w-4" fill="currentColor" /> Sonar ya
             </button>
             <button type="button" onClick={() => session.remove(e.queueId)} aria-label={`Quitar ${e.track.title}`} className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/[0.03] text-dim transition-colors hover:bg-danger/10 hover:text-danger">
               <X className="h-4 w-4" />
@@ -212,6 +212,13 @@ export function DriveModesPanel({ view, session }: { view: HostView; session: Ho
             <span className="block text-sm text-dim">Pausar, saltar y volver desde su celular.</span>
           </span>
           <Toggle checked={settings.passengerControl} onChange={(v) => set({ passengerControl: v })} label="Control de los pasajeros" />
+        </label>
+        <label className="flex items-center justify-between gap-4 rounded-xl border border-white/8 px-3 py-3">
+          <span>
+            <span className="block font-semibold text-ink">Los pasajeros pueden «Sonar ya»</span>
+            <span className="block text-sm text-dim">Una canción suena de inmediato, sin esperar turno ni votos.</span>
+          </span>
+          <Toggle checked={settings.passengerPlayNow} onChange={(v) => set({ passengerPlayNow: v })} label="Sonar ya de los pasajeros" />
         </label>
         <div className="flex items-center justify-between gap-4 rounded-xl border border-white/8 px-3 py-3">
           <span>

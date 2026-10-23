@@ -43,6 +43,7 @@ export function RiderScreen({
   if (!session || !view) return null;
 
   const snap = view.snapshot;
+  const canPlayNow = !!snap?.settings.passengerPlayNow;
   const stateOf = pickStateFor(view, snap);
   const library = view.library?.items ?? [];
   const tabs: { id: Tab; label: string; n?: number }[] = [
@@ -202,12 +203,13 @@ export function RiderScreen({
 
             <div className="min-h-[40vh]" role="tabpanel">
               {tab === "buscar" && (
-                <SearchPanel onPick={request} stateOf={stateOf} />
+                <SearchPanel onPick={request} onPlayNow={canPlayNow ? (t) => void session.playNow({ track: t }) : undefined} stateOf={stateOf} />
               )}
               {tab === "cola" && (
                 <QueueList
                   queue={snap?.queue ?? []}
                   me={view.me}
+                  onPlayNow={canPlayNow ? (q) => void session.playNow({ queueId: q }) : undefined}
                   onVote={(q, v) => {
                     navigator.vibrate?.(8);
                     void session.vote(q, v);

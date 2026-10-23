@@ -4,7 +4,7 @@ import { ArrowRight, Download, Loader2, Radar } from 'lucide-react';
 import { normalizeRoomCode } from '../../shared/room-code';
 import { CARBEAT_VERSION } from '../../shared/version';
 import { relay } from '../core/room/relay-client';
-import { getDisplayName, getLastRiderRoom, setDisplayName } from '../core/room/identity';
+import { getDisplayName, setDisplayName } from '../core/room/identity';
 import { StartButton } from '../ui/StartButton';
 import { Key } from '../ui/controls';
 import { KineticTitle } from '../ui/kit';
@@ -64,7 +64,7 @@ function offsetWithin(el: HTMLElement, ancestor: HTMLElement): number {
 }
 
 export function Landing({ onHost, onJoin }: { onHost: () => void; onJoin: (room: string, name: string) => void }) {
-  const [code, setCode] = useState(() => getLastRiderRoom() ?? '');
+  const [code, setCode] = useState('');
   const [name, setName] = useState(() => getDisplayName());
   const [error, setError] = useState<string | null>(null);
   const [nearby, setNearby] = useState<{ room: string; name: string }[] | null>(null);
