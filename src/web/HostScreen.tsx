@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Power, QrCode, Sliders } from 'lucide-react';
+import { Moon, Power, QrCode, Sliders } from 'lucide-react';
 import type { Notice } from '../../shared/protocol';
 import { globalAudioEngine } from '../core/audio/audio-player';
+import { useBackgroundPlayback } from '../core/audio/background-playback';
 import { carLibrary } from '../core/library';
 import { useHostSession, useLibrary, usePlayer, useTicker } from '../hooks';
 import { Cluster } from '../ui/Cluster';
@@ -16,6 +17,7 @@ import { Plate } from '../ui/Plate';
 import { TripComputer, queueSeconds } from '../ui/TripComputer';
 import { Wordmark } from '../ui/Wordmark';
 import { useWakeLock } from '../ui/useWakeLock';
+import { ScreenOffLayer, useScreenOff } from '../ui/useScreenOff';
 import { CabinClock, TelltaleBar, useCabinIgnition, useMediaQuery } from '../ui/car/cabin';
 import { HighwayStrip, HighwayTag } from '../ui/car/HighwayStrip';
 import { useHighwayPref } from '../ui/car/highway-pref';
@@ -39,6 +41,8 @@ export function HostScreen({ room, onExit, onRoomChange }: { room: string; onExi
     if (view && view.room !== room) onRoomChange?.(view.room);
   }, [view, room, onRoomChange]);
   const player = usePlayer();
+  useBackgroundPlayback(session, player);
+  const { off: screenOff, sleep, wake } = useScreenOff();
   const lib = useLibrary();
   const [tab, setTab] = useState<Tab>('cola');
   const [invite, setInvite] = useState(false);
@@ -160,6 +164,9 @@ export function HostScreen({ room, onExit, onRoomChange }: { room: string; onExi
         <Key size="sm" onClick={() => setShowEq(true)} aria-label="Ecualizador Car Audio">
           <Sliders className="h-4 w-4 text-cyan" /> <span className="hidden sm:inline">Audio</span>
         </Key>
+        <Key size="sm" onClick={sleep} aria-label="Apagar la pantalla y seguir escuchando">
+          <Moon className="h-4 w-4" /> <span className="hidden sm:inline">Pantalla</span>
+        </Key>
         <Key size="sm" variant="danger" onClick={() => setConfirmOff(true)} aria-label="Apagar la cabina">
           <Power className="h-4 w-4" /> <span className="hidden sm:inline">Apagar</span>
         </Key>
@@ -264,7 +271,7 @@ export function HostScreen({ room, onExit, onRoomChange }: { room: string; onExi
               />
             )}
             {tab === 'carro' && <CarMusicPanel lib={lib} onPlay={(tr) => session.playTrackNow(tr)} onQueue={(tr) => session.request(tr)} />}
-            {tab === 'modos' && <DriveModesPanel view={view} session={session} />}
+            {tab === 'modos' && <DriveModesPanel view={view} session={session} onScreenOff={sleep} />}
           </div>
         </aside>
       </main>
@@ -293,6 +300,7 @@ export function HostScreen({ room, onExit, onRoomChange }: { room: string; onExi
         )}
       </AnimatePresence>
     </div>
+    {screenOff && <ScreenOffLayer onWake={wake} />}
     </>
   );
 }

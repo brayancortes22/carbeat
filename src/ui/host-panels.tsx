@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { FolderOpen, ListX, Play, Trash2, Upload, X } from 'lucide-react';
+import { FolderOpen, ListX, Moon, Play, Trash2, Upload, X } from 'lucide-react';
 import type { RoomSettings } from '../../shared/protocol';
 import type { Track } from '../../shared/track';
 import { AUTOPILOT_MODES, type AutopilotMode } from '../core/autopilot';
@@ -185,7 +185,7 @@ export function CarMusicPanel({ lib, onPlay, onQueue }: { lib: LibraryState; onP
 
 // ------------------------------------------------------- modos de manejo
 
-export function DriveModesPanel({ view, session }: { view: HostView; session: HostSession }) {
+export function DriveModesPanel({ view, session, onScreenOff }: { view: HostView; session: HostSession; onScreenOff?: () => void }) {
   const settings = view.engine.settings;
   const set = (patch: Partial<RoomSettings>) => session.setSettings(patch);
   const [highway, setHighway] = useHighwayPref();
@@ -260,6 +260,22 @@ export function DriveModesPanel({ view, session }: { view: HostView; session: Ho
           </span>
           <Toggle checked={highway} onChange={setHighway} label="Autopista 3D" />
         </label>
+        {onScreenOff && (
+          <div className="flex items-start justify-between gap-4 rounded-xl border border-white/8 px-3 py-3">
+            <span>
+              <span className="block font-semibold text-ink">Pantalla apagada</span>
+              <span className="block text-sm text-dim">
+                Deja el panel en negro y la música sigue, también YouTube. Toca la pantalla para encenderla.
+              </span>
+              <span className="mt-1 block text-xs text-faint">
+                Con el botón físico del equipo, YouTube puede pausarse por su política: para esos viajes usa esta opción.
+              </span>
+            </span>
+            <Key size="sm" onClick={onScreenOff} aria-label="Apagar la pantalla y seguir escuchando">
+              <Moon className="h-4 w-4" /> Apagar
+            </Key>
+          </div>
+        )}
       </fieldset>
     </div>
   );
