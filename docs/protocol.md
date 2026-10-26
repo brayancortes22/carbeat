@@ -1,57 +1,109 @@
-# CarBeat: Protocolo de Sala y Mensajería Telemática (RoomProtocol v2.2)
+# CarBeat — Protocolo de sala v2 (v2.2.0)
 
-El protocolo v2 de CarBeat opera bajo el paradigma de **«El carro es la única fuente de verdad autoritativa»**. Todos los mensajes intercambiados entre el Host (cabina) y los Riders (pasajeros) siguen el contrato de tipos `WireMessage`.
+El carro es la **única fuente de verdad**. Los pasajeros no modifican el estado: envían
+**intenciones** con un id único y reciben **fotos** (`Snapshot`) con una revisión creciente. El
+motor puro vive en `shared/room-engine.ts`; los tipos y la validación, en `shared/protocol.ts`.
 
----
+Los mensajes viajan igual por **P2P (WebRTC)**, **WebSocket local** (`/ws-room`),
+**BroadcastChannel** (misma pestaña) y **HTTP** (`/api/room`). Cada intención se aplica una sola
+vez aunque llegue por varios caminos.
 
-## 1. Estructura de Mensajes Wire (`WireMessage`)
-
-Los mensajes se transmiten en formato JSON UTF-8 a través de enlaces **P2P (WebRTC DataChannel)**, **LAN (WebSocket local `ws://localhost:3001`)** o **Relay Cloud (Upstash Redis)**.
+## 1. Mensajes de cable (`WireMessage`)
 
 ```ts
 export type WireMessage =
-  | { kind: 'snapshot'; snapshot: RoomSnapshot }
-  | { kind: 'intent'; id: string; from: string; intent: Intent }
-  | { kind: 'patch'; from: number; to: number; patch: unknown }
-  | { kind: 'ack'; id: string; ok: boolean; reason?: string }
-  | { kind: 'ping'; t: number }
-  | { kind: 'pong'; t: number };
+  | { t: 'intent'; e: Envelope }
+  | { t: 'snapshot'; s: Snapshot }
+  | { t: 'library'; l: LibraryIndex };
 ```
 
----
+- **`intent`** — lo envía un pasajero (o el carro, para control).
+- **`snapshot`** — foto completa del estado; la publica sólo el carro.
+- **`library`** — índice de la música guardada en el carro (sin URLs).
 
-## 2. Catálogo de Intenciones (`Intent`)
-
-Los pasajeros envían intenciones al carro; el motor de sala (`room-engine.ts`) las evalúa, valida las reglas y emite los efectos correspondientes.
-
-| Tipo de Intención | Parámetros | Comportamiento en Cabina |
-| :--- | :--- | :--- |
-| `request` | `track: Track`, `playNow?: boolean` | Solicita una canción. Si `playNow: true`, la canción corta la reproducción actual y suena de inmediato (si `passengerPlayNow` está habilitado). De lo contrario, se encola ordenadamente. |
-| `play_now` | `queueId?: string`, `track?: Track` | Solicita reproducir de inmediato una canción ya existente en la cola (`queueId`) o una pista recién seleccionada (`track`). |
-| `vote` | `queueId: string`, `value: -1 \| 0 \| 1` | Emite o anula el voto para una canción en la cola. Cada celular tiene estrictamente 1 voto por canción. |
-| `control` | `action: 'play' \| 'pause' \| 'next' \| 'prev'` | Comandos de transporte emitidos por el conductor o pasajeros autorizados. |
-| `hello` | `name: string` | Saludo inicial de un pasajero para registrarse a bordo de la sala. |
-| `bye` | *(ninguno)* | Notificación de salida voluntaria de un pasajero. |
-
----
-
-## 3. Estado de la Sala (`RoomSnapshot`)
+## 2. Sobre (`Envelope`)
 
 ```ts
-export interface RoomSnapshot {
-  room: string;
-  version: number;
-  now: PlayingTrack | null;
-  position: number;
-  queue: QueueEntry[];
-  riders: Record<string, RiderState>;
-  settings: RoomSettings;
-  autopilot: AutopilotMode;
+export interface Envelope {
+  id: string;        // único por mensaje: deduplica entre transportes
+  room: string;      // código de sala, p. ej. VIBE-7KQ3
+  from: string;      // id estable del dispositivo del pasajero
+  name: string;      // nombre visible
+  at: number;        // reloj del emisor (informativo)
+  intent: Intent;
 }
 ```
 
-### Configuración de la Sala (`RoomSettings`):
-* `passengerPlayNow: boolean`: Controla si los pasajeros tienen permiso para usar el botón "Sonar Ya" o si sólo pueden encolar.
-* `autopilotMode: 'smart' | 'car_only' | 'party' | 'off'`: Modo del piloto automático cuando la cola se agota.
-* `allowExplicit: boolean`: Filtro de contenido explícito.
-* `votesToSkip: number`: Votos negativos necesarios para descartar una canción automáticamente.
+## 3. Intenciones (`Intent`)
+
+| Tipo | Parámetros | Efecto en el carro |
+|---|---|---|
+| `hello` | `name` | Registra al pasajero en la sala. |
+| `bye` | — | Lo quita de la lista de pasajeros. |
+| `request` | `track`, `playNow?` | Pide una canción. Si `playNow` y la regla lo permite, suena ya; si no, se encola. |
+| `vote` | `queueId`, `value: -1 \| 0 \| 1` | Vota o anula el voto de una entrada de la cola. |
+| `control` | `action: 'toggle' \| 'next' \| 'prev'` | Pausa/reanuda, salta o vuelve. Requiere `passengerControl` si lo envía un pasajero. |
+| `play_now` | `queueId?` o `track?` | «Sonar ya»: adelanta una canción de la cola o de la búsqueda. Requiere `passengerPlayNow` si lo envía un pasajero. |
+
+Los límites de validación están en `shared/protocol.ts`:
+
+| Campo | Máximo |
+|---|---|
+| Nombre | 32 caracteres |
+| Título | 160 |
+| Artista / álbum | 120 |
+| URL | 1024 |
+| Id | 96 |
+| Intención serializada | 8 KiB |
+| Foto | 96 KiB |
+| Biblioteca | 120 KiB |
+
+Las URLs de audio sólo aceptan `http:`, `https:` o `data:audio/`; una pista `local_car` viaja
+sólo con su id y el carro la resuelve en su biblioteca.
+
+## 4. Foto de la sala (`Snapshot`)
+
+```ts
+export interface Snapshot {
+  v: 2;
+  room: string;
+  name: string;
+  rev: number;
+  sentAt: number;
+  now: NowPlaying | null;
+  queue: QueueEntry[];
+  history: Track[];
+  riders: Rider[];
+  settings: RoomSettings;
+  notices: Notice[];
+  libraryRev?: number;
+  closed: boolean;
+}
+```
+
+- `now`: canción actual con `isPlaying`, `position` y `duration`.
+- `queue`: entradas con `queueId`, `track`, quién la pidió, `autopilot` y `votes`.
+- `history`: últimas canciones reproducidas.
+- `notices`: avisos para un pasajero (`to`) o para todos (`*`).
+- `rev`: el pasajero sólo pinta fotos con revisión mayor; recibir la misma dos veces no cambia
+  nada.
+
+## 5. Reglas de la sala (`RoomSettings`)
+
+| Campo | Tipo | Por defecto | Efecto |
+|---|---|---|---|
+| `passengerControl` | boolean | `true` | Los pasajeros pueden pausar, saltar y volver. |
+| `passengerPlayNow` | boolean | `false` | Los pasajeros pueden usar «Sonar ya». |
+| `maxPendingPerRider` | number | `4` | Canciones pendientes por pasajero. |
+
+## 6. Piloto automático
+
+`AutopilotMode`: `off`, `hybrid` (Afín), `local` (Solo carro), `cloud` (Solo internet),
+`crossover` (Mezcla). Cuando la cola se vacía, el carro elige la siguiente según el modo; si no
+encuentra nada, pausa y avisa «La cola está vacía».
+
+## 7. Persistencia
+
+El carro guarda por sala la cola, votos, historial, reglas, piloto y la canción con su posición
+(cada 5 s y al cambiar). La sala caduca a las 6 h y se borra al cerrarla. Al recargar, la canción
+queda en pausa en su segundo.

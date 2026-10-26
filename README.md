@@ -4,7 +4,45 @@
 > **Versión:** 2.2.0 (Producción Oficial)  
 > **Despliegue en Vivo:** [https://carbeat-pi.vercel.app](https://carbeat-pi.vercel.app)
 
-Sistema colaborativo de música en tiempo real para vehículos y viajes por carretera. Convierte la pantalla del carro (Tablet, radio Android china, Android Auto o navegador) en un reproductor central (Host) y permite que los pasajeros se unan como DJs desde sus teléfonos móviles sin instalar aplicaciones pesadas para buscar, pedir, votar canciones y controlar el ambiente musical de la cabina en vivo.
+Sistema colaborativo de música en tiempo real para vehículos y viajes por carretera. Convierte la
+pantalla del carro (tablet, radio Android china, Android Auto o navegador) en un reproductor
+central (Host) y permite que los pasajeros se unan como DJs desde sus teléfonos móviles sin
+instalar aplicaciones pesadas para buscar, pedir, votar canciones y controlar el ambiente musical
+de la cabina en vivo.
+
+**Documentación:** [índice](docs/README.md) · [arquitectura](docs/architecture.md) ·
+[protocolo](docs/protocol.md) · [API del relé](docs/API_PROTOCOL.md) ·
+[despliegue](docs/DEPLOY.md) · [guía de uso](docs/user-guide.md) ·
+[sistema de diseño](docs/design-system.md) · [cambios](docs/CHANGELOG.md)
+
+---
+
+## 🎛️ Qué hace
+
+| Quién | Qué puede hacer |
+|---|---|
+| **Carro** | Crear la sala (código tipo `VIBE-7KQ3` y QR), buscar en YouTube Music, **«+ Cola»** o **«Sonar ya»** en cada resultado, «Sonar ya» y quitar en cada canción de la cola, música guardada en el carro, historial, piloto automático, ecualizador y reglas de la sala. |
+| **Pasajero** | Entrar con el código o el QR, buscar y **pedir**, votar 👍/👎 en la cola, pausar/saltar si el carro lo permite, **«Sonar ya»** si el carro lo permite y enviar MP3 locales por P2P. |
+
+### Reglas de la sala (pestaña **Modos** del carro)
+
+| Ajuste | Por defecto | Efecto |
+|---|---|---|
+| Los pasajeros controlan la música | encendido | Pausar, saltar y volver desde el celular. |
+| Los pasajeros pueden «Sonar ya» | **apagado** | Una canción (de la búsqueda o de la cola) suena de inmediato, sin esperar turno ni votos. Apagado, el carro responde «El conductor no permite “Sonar ya” a los pasajeros». |
+| Canciones en espera por pasajero | 4 | Nadie llena la cola solo. |
+
+### Piloto automático
+
+Cuando la cola se vacía elige la siguiente: **Afín** (por defecto: primero música del carro del
+mismo artista, si no, afines de internet), **Solo carro**, **Solo internet**, **Mezcla** (rota
+géneros) o **Apagado**.
+
+### La sala sobrevive a una recarga
+
+El carro guarda por sala la cola, votos, historial, reglas, piloto y la canción con su posición
+(cada 5 s y al cambiar; caduca a las 6 h; se borra al cerrar la sala). Al volver, la canción queda
+en pausa en su segundo.
 
 ---
 
@@ -22,7 +60,7 @@ Sistema colaborativo de música en tiempo real para vehículos y viajes por carr
 - El campo de placa arranca **100% limpio y vacío (`""`)**, mostrando el placeholder `"VIBE-7KQ3"` para que el usuario introduzca el código del carro manualmente o utilice el escaneo de código QR.
 
 ### 3. 🛡️ Blindaje WebGL 2D/3D & Soporte para Radios Antiguas (Anti "Fallo en la cabina")
-- **Detección Previa de Hardware (`graphics-detector.ts`):** 
+- **Detección Previa de Hardware (`graphics-detector.ts`):**
   - Evalúa la capacidad real de compilación de shaders antes de intentar cargar WebGL.
   - Detecta pantallas de carro de gama de entrada o hardware embebido modesto (`navigator.deviceMemory <= 2 GB`, CPUs de 4 núcleos lentas).
   - En radios antiguas o sin GPU dedicada, activa automáticamente el **Modo 2D Ligero Atmosférico** (cero consumo de GPU, carga instantánea, sin bloqueos ni reinicios).
@@ -55,7 +93,7 @@ Sistema colaborativo de música en tiempo real para vehículos y viajes por carr
 - **Servicio en Primer Plano (APK):** `BackgroundAudioService.java` declara una sesión de reproducción `mediaPlayback` con `PARTIAL_WAKE_LOCK` y `WifiLock`. Mantiene vivo el WebView y la conexión de la sala mientras la pantalla está apagada o la app en segundo plano.
 - **Controles del Sistema:** La notificación y la pantalla de bloqueo muestran título, carátula y botones *Anterior / Play-Pausa / Siguiente* (`MediaSession` nativa), que se traducen a acciones de la sala en JS.
 - **Web / PWA:** Se usa la Media Session API del navegador para metadatos y controles; no se registra dos veces en el APK para no duplicar la notificación.
-- **Por qué el modo luna y no el botón físico:** el reproductor de YouTube se pausa cuando Android apaga la pantalla de verdad. Bajar el brillo a cero y pintar una capa negra mantiene el WebView «visible», de modo que YouTube sigue sonando. Con el botón físico del equipo, YouTube puede pausarse por su propia política.
+- **Por qué el modo luna y no el botón físico:** el reproductor de YouTube se pausa cuando Android apaga la pantalla de verdad. Bajar el brillo a cero y pintar una capa negra mantiene el WebView «visible», de modo que YouTube sigue sonando. Con el botón físico del equipo, YouTube puede pausarse por su propia política; el audio local/HTML5 sí sigue gracias al servicio.
 - **Se detiene al salir:** el servicio se apaga al cerrar la cabina o abandonar la pantalla del carro (`stopWithTask="true"`), evitando música fantasma tras cerrar desde *Recientes*.
 
 **Archivos clave:** `BackgroundAudioService.java`, `BackgroundAudioPlugin.java`, `CarModePlugin.java` (`setScreenDim`), `src/core/audio/background-playback.ts`, `src/ui/useScreenOff.tsx`.
@@ -67,7 +105,7 @@ Sistema colaborativo de música en tiempo real para vehículos y viajes por carr
 ```mermaid
 flowchart TD
     subgraph CABINA_HOST ["1. Host (Pantalla del Carro / Tablet / Android Auto)"]
-        H_UI["HostScreen.tsx"] --> G_DET["graphics-detector.ts (Safe WebGL Probe)"]
+        H_UI["HostScreen.tsx / CarApp.tsx"] --> G_DET["graphics-detector.ts (Safe WebGL Probe)"]
         H_UI --> EQ["equalizer-service.ts (Web Audio 3-Bands)"]
         H_UI --> USB["library.ts (crawlDirectory 12 niveles)"]
         H_UI --> HW["HighwayStrip.tsx (ThreeErrorBoundary + Fallback 2D)"]
@@ -78,7 +116,7 @@ flowchart TD
 
     subgraph RED_TRANSPORTE ["2. Red de Transporte Híbrida"]
         RE <--> P2P["WebRTC DataChannel (PeerJS P2P)"]
-        RE <--> LAN["WebSocket Local LAN (ws://localhost:3001)"]
+        RE <--> LAN["WebSocket Local LAN (ws-room / :8080)"]
         RE <--> RELAY["Relay Upstash Redis / Serverless Cloud"]
     end
 
@@ -90,6 +128,68 @@ flowchart TD
         MP3 --> P2P
         VOTE --> P2P
     end
+```
+
+Detalle completo en [docs/architecture.md](docs/architecture.md).
+
+---
+
+## 🚀 Puesta en marcha
+
+Requisitos: Node.js 22; para el APK, JDK 21 y el SDK de Android.
+
+```bash
+npm install
+npm run dev          # web en http://localhost:5173 (también http://<IP-de-tu-PC>:5173)
+npm run dev:app      # la app del APK en el navegador (/app.html)
+npm test             # vitest
+npm run build        # tsc -b + build web en dist/
+```
+
+`npm run dev` incluye la API (`/api/room`, `/api/yt/search`, `/api/yt/related`, `/api/version`) y
+el relé WebSocket con un Redis **en memoria**: no hace falta Upstash para desarrollar.
+
+### Red local sin internet
+
+```bash
+npm run lan          # compila la web y un servidor Node en el puerto 8080
+```
+
+Un portátil en el carro sirve web, API y relé a los celulares del mismo Wi-Fi o hotspot. Todo
+funciona sin internet salvo la búsqueda de YouTube.
+
+### APK Android
+
+```bash
+npm run cap:sync     # build en modo app (dist-app/) + cap sync android
+cd android
+./gradlew assembleDebug
+```
+
+El APK queda en `android/app/build/outputs/apk/debug/app-debug.apk`. En CI, `build-apk.yml` lo
+compila en cada push a `main` y lo deja como artefacto `carbeat-android-apk`.
+
+### Producción (Vercel + Upstash)
+
+Variables: `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN` (también se aceptan
+`KV_REST_API_URL` / `KV_REST_API_TOKEN`). Sin ellas el relé cae a memoria, que en Vercel no sirve
+(cada función tiene la suya). Opcional: `CARBEAT_IP_SALT` para el hash de IP de «carros cercanos».
+Pasos en [docs/DEPLOY.md](docs/DEPLOY.md).
+
+---
+
+## 📁 Estructura
+
+```
+shared/        protocolo v2, motor de la sala (room-engine) y códigos de sala: lo usan web, APK y servidor
+server/        relé HTTP, relé WebSocket, Redis (Upstash o memoria), búsqueda YouTube Music, servidor LAN
+api/           funciones de Vercel que llaman a server/
+src/web/       portada, cabina del carro y pasajero (web)
+src/app/       APK: modo carro, modo pasajero, escáner QR, puente nativo
+src/core/      sesiones del carro y del pasajero, enlaces de red, reproductor, piloto automático
+src/ui/        componentes (música, tablero, autopista 3D, controles) y escena 3D de la portada
+android/       proyecto nativo Capacitor (plugins CarMode y BackgroundAudio, servicio de reproducción)
+docs/          arquitectura, protocolo, API, despliegue, guía de uso y sistema de diseño
 ```
 
 ---
@@ -106,28 +206,35 @@ CarBeat cuenta con una suite completa de **86 pruebas automatizadas** que certif
 * `tests/qa-security-abuse.test.ts`: Pruebas DevSecOps, saneamiento de payloads XSS y límites de subida de audio.
 
 ```bash
-# Ejecutar todas las pruebas
-npm test
-
-# Compilación estricta para producción
-npm run build
-npm run build:app
+npm test             # 86/86 tests
+npm run build        # compilación estricta web
+npm run build:app    # compilación estricta de la app
 ```
 
 ---
 
-## 🚀 Despliegue y Flujo de Ramas Git (Regla 4)
+## 🔀 Flujo de Ramas y Despliegue (Regla 4)
 
 El ciclo de desarrollo sigue el estándar de **3 ramas estrictas**:
-1. `development`: Integración activa y refactorizaciones.
-2. `qa`: Aseguramiento de calidad, staging y validación con los 86 tests.
-3. `main`: Producción oficial desplegada automáticamente en Vercel.
+1. `development`: integración activa y refactorizaciones.
+2. `qa`: aseguramiento de calidad, staging y validación con los 86 tests.
+3. `main`: producción oficial desplegada automáticamente en Vercel.
 
 ```bash
 # Sincronización nativa Android
-npx cap sync android
+npm run cap:sync
 
 # Despliegue en producción con Vercel CLI
 npx vercel build --prod
 npx vercel deploy --prebuilt --prod
 ```
+
+| Workflow | Cuándo | Qué hace |
+|---|---|---|
+| `deploy-vercel.yml` | push a `main`, `qa`, `development`; PR a `main` y `qa` | Compila y despliega con `vercel deploy --prebuilt`. |
+| `build-apk.yml` | push a `main` o a mano | APK debug como artefacto. |
+| `auto-approve-merge.yml` | `pull_request_target` | Valida con `npm run build` y fusiona PRs autorizados. |
+
+---
+
+Desarrollado por **Brayan Stid Cortés Lombana (`bscl`)** y Diego.

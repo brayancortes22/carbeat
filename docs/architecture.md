@@ -1,96 +1,85 @@
-# CarBeat: Documentación Técnica de Arquitectura
+# CarBeat — Arquitectura (v2.2.0)
 
-## 1. Resumen Ejecutivo
-CarBeat es un sistema de reproducción y control musical colaborativo diseñado para entornos de cabina vehicular y eventos sociales. Permite que múltiples usuarios (DJs) interactúen con una pantalla principal (Host/Reproductor) sin depender de conexión a internet constante ni de suscripciones de streaming restrictivas.
+## Idea central
 
-## 2. Componentes del Sistema
-
-### 2.1 Host (Pantalla del Carro / Parlante Principal)
-- **Responsabilidad:** Reproducción continua de audio, custodia de la biblioteca local, almacenamiento de música enviada por pasajeros (`/Music/DJ_Queue`), y difusión del estado de reproducción.
-- **Plataformas Soportadas:** Android Auto / Pantallas Android chinas (APK nativa vía Capacitor), Tablets, Smart TVs y Navegadores en laptops.
-
-### 2.2 Client / DJ (Celulares y Dispositivos de Pasajeros)
-- **Responsabilidad:** Explorar el catálogo disponible, encolar pistas, votar por canciones y enviar pistas nuevas adquiridas con su plan de datos.
-- **Plataformas Soportadas:** 
-  - Android (APK nativa o PWA).
-  - iOS / iPadOS (PWA instantánea vía Safari sin necesidad de sideloading ni App Store).
-  - Web Desktop / Mobile.
-
-## 3. Matriz de Transporte Híbrido
+El **carro** (host) guarda y decide todo: cola, votos, historial, reglas y qué suena. Los
+pasajeros envían **intenciones** y pintan la última **foto** que reciben. El servidor es un buzón:
+no aplica reglas. En la v1 el servidor y el carro aplicaban votos cada uno por su lado (dos
+verdades) y una petición podía contar dos veces; la v2 lo resuelve con un único motor y una id
+por intención. Formatos: [protocol.md](protocol.md).
 
 ```
-                 +---------------------------+
-                 |    ConnectionManager      |
-                 +---------------------------+
-                               |
-         +---------------------+---------------------+
-         |                                           |
-         v                                           v
-+-------------------+                       +-------------------+
-|   LAN Transport   |                       |  Cloud Transport  |
-|  (WebSocket local |                       | (Relay WebSocket  |
-|   192.168.x.x)    |                       |   Server Vercel)  |
-+-------------------+                       +-------------------+
+  Pasajero (celular)                  Carro (tablet / radio / navegador)
+  RiderSession ──intención──►  links: P2P · WebSocket · BroadcastChannel · HTTP  ──► HostSession
+        ▲                                                                              │
+        └──────────────── foto (Snapshot, rev creciente) ◄─────────────────────────────┘
+                                         │ HTTP
+                                         ▼
+                              /api/room (relay.ts) ── Upstash Redis
 ```
 
-- **LAN Directo:** Se activa cuando Host y Client comparten el mismo segmento de red (Hotspot del carro o Wi-Fi doméstico).
-- **Cloud Relay:** Se activa cuando los dispositivos están en redes distintas (ej. pasajero con datos móviles 4G/5G y Host en Wi-Fi o viceversa).
+## Piezas
 
-## 4. Descubrimiento de Hosts (ShareIt-style)
+| Capa | Archivos | Qué hace |
+|---|---|---|
+| Protocolo y reglas | `shared/protocol.ts`, `shared/room-engine.ts`, `shared/room-code.ts` | Tipos, validación de todo lo que entra y motor puro de la sala (pedir, votar, control, «Sonar ya», veto, orden de la cola). Con tests. |
+| Carro | `src/core/room/host-session.ts`, `host-store.ts` | Aplica intenciones, controla el reproductor, publica fotos, piloto automático y guarda la sala en `localStorage` (6 h). |
+| Pasajero | `src/core/room/rider-session.ts` | Envía intenciones, estado de conexión real y extrapola la posición de la canción. |
+| Enlaces | `src/core/room/links.ts`, `relay-client.ts` | PeerJS (WebRTC), WebSocket local, BroadcastChannel y HTTP, con reintentos. |
+| Servidor | `server/relay.ts`, `ws-relay.ts`, `redis.ts`, `handlers.ts`, `yt-music.ts`, `lan-server.ts`; `api/` | Relé HTTP con token del carro, relé WebSocket, Redis (Upstash o memoria), búsqueda de YouTube Music y servidor para red local. |
+| Reproducción | `src/core/audio/audio-player.ts`, `youtube-player-bridge.ts`, `equalizer-service.ts`, `background-playback.ts` | YouTube IFrame API con reintentos, audio local, ecualizador de 3 bandas y sesión de reproducción en segundo plano. |
+| Música y piloto | `src/core/search.ts`, `library.ts`, `autopilot.ts` | Búsqueda unificada, música del carro, escáner USB recursivo y modos Afín / Solo carro / Solo internet / Mezcla / Apagado. |
+| Web | `src/web/` | Portada (escena 3D), cabina del carro y pantalla del pasajero. |
+| APK | `src/app/`, `android/` | Modo carro (riel, cajón, inmersivo, horizontal, pantalla encendida, hápticos), modo pasajero (pestañas abajo, escáner QR con jsQR) y plugins nativos. |
+| Interfaz | `src/ui/` | Componentes de música, tablero (agujas, testigos, placa), autopista 3D de la cola y escena `three/NightDrive`. Diseño: [design-system.md](design-system.md). |
 
-### 4.1 Protocolo de Anuncio
+## Audio y pantalla apagada
 
-El Host anuncia su presencia cada 2 segundos a través de WebSocket (`/ws-discovery`) y BroadcastChannel:
+La reproducción real sigue en JS (`AudioEngine`): `<audio>` HTML5 para archivos locales, MP3
+directos y Audius; YouTube IFrame para las canciones completas.
 
-```json
-{
-  "type": "HOST_ANNOUNCE",
-  "roomId": "BEAT-784",
-  "roomName": "Carro BEAT-784",
-  "hostIp": "192.168.100.3",
-  "port": 5173,
-  "djCount": 0,
-  "timestamp": 1729023400000,
-  "announcerId": "ann_1729023400000_abc123"
-}
-```
+- **APK:** `BackgroundAudioService.java` es un servicio en primer plano `mediaPlayback` con
+  `PARTIAL_WAKE_LOCK` y `WifiLock`. Mantiene vivo el WebView y la conexión de la sala cuando la
+  pantalla se apaga o la app pasa a segundo plano. Los wake locks solo se mantienen mientras
+  `playing` es verdadero.
+- **Controles del sistema:** el servicio publica una `MediaSession` con título, artista, carátula
+  y botones anterior / play-pausa / siguiente. `BackgroundAudioPlugin.java` traduce esos botones a
+  acciones de la sala (`toggle`, `next`, `prev`).
+- **Modo luna:** `src/ui/useScreenOff.tsx` baja el brillo de la ventana a cero y pinta una capa
+  negra. Android sigue considerando la pantalla encendida, así que YouTube no recibe la señal de
+  «pantalla apagada» y sigue sonando. Un toque o el botón *Atrás* devuelven el brillo.
+- **Web / PWA:** `src/core/audio/background-playback.ts` usa la Media Session API del navegador
+  para metadatos y controles. En el APK se omite para no duplicar la notificación nativa.
+- **Límite de YouTube:** con el botón físico de apagado, YouTube puede pausar por su propia
+  política. El audio local/HTML5 sí sigue gracias al servicio. Para YouTube hay que usar el botón
+  luna.
+- **Cierre:** el servicio se detiene al cerrar la cabina o salir de la pantalla del carro
+  (`stopWithTask="true"`), para no dejar música fantasma al cerrar desde *Recientes*.
 
-### 4.2 Arquitectura de Conexión
+## Gráficos y rendimiento
 
-```
-                    Host (Pantalla del Carro)              DJ (Celular)
-                           |                                      |
-                           |  HOST_ANNOUNCE (cada 2s)            |
-                           |----------------------------------->|
-                           |                                      |
-                           |<--- DJ se conecta a hostIp:port ----|
-                           |   /ws-rooms?room=BEAT-784           |
-                           |                                      |
-                           |<--- SYNC_CATALOG {catalog, queue}   |
-                           |   {currentTrack, isPlaying, ...}    |
-                           |                                      |
-```
+- **Detección de hardware** (`src/core/device/graphics-detector.ts`): prueba la compilación de
+  shaders antes de cargar WebGL y detecta equipos modestos (`deviceMemory <= 2 GB`, CPUs lentas).
+  Si no hay GPU fiable, activa el **Modo 2D Ligero Atmosférico**.
+- **`ThreeErrorBoundary`:** protege la portada y la autopista de la cola. Si la GPU pierde el
+  contexto, la interfaz cae a letreros planos 2D sin tumbar la app ni cortar el audio.
+- **Autopista de la cola** (`src/ui/car/HighwayStrip.tsx`): letreros de las próximas canciones en
+  la cabina; se puede apagar y usa el fallback 2D sin WebGL o con ahorro de datos.
+- **Portada 3D** (`src/ui/three/NightDrive.tsx`): geometría procedural, sin modelos ni texturas que
+  descargar. Al desmontarla se libera la LUT DFG de three para no retener el renderer en cada ida
+  y vuelta.
 
-### 4.3 Componentes de Red
+## Música del carro
 
-| Módulo | Archivo | Responsabilidad |
-|--------|---------|-----------------|
-| Host Announcer | `src/core/network/host-discovery.ts` | Anuncia presencia del Host cada 2s |
-| Host Scanner | `src/core/network/host-discovery.ts` | Escucha anuncios y muestra hosts encontrados |
-| Room Channel | `src/core/network/room-channel.ts` | Comunicación WebSocket de sala con reconexión |
-| Vite WS Plugin | `vite.config.ts` | Servidor WebSocket integrado en desarrollo |
+- `src/core/library.ts` indexa archivos locales y memorias USB con `crawlDirectory` (hasta 12
+  niveles), soporta `.mp3`, `.m4a`, `.wma`, `.flac`, `.wav`, `.aac`, `.ogg` y `.opus`, y genera IDs
+  compatibles con WebViews antiguas.
+- Los pasajeros pueden enviar MP3 locales por el canal P2P (WebRTC DataChannel / LAN) sin gastar
+  internet.
+- `equalizer-service.ts` aplica filtros biquad de bajos (80 Hz), medios (1 kHz) y agudos (8 kHz)
+  con presets automotrices; los ajustes se guardan en el dispositivo.
 
-### 4.4 Endpoints WebSocket
+## Despliegue
 
-| Endpoint | Propósito | Puerto |
-|----------|-----------|--------|
-| `/ws-rooms` | Comunicación de sala (cola, reproducción, votos) | 5173 |
-| `/ws-discovery` | Descubrimiento de hosts cercanos (estilo ShareIt) | 5173 |
-
----
-
-## 5. Módulos Adicionales de Última Generación
-
-- **LocalScanner (`src/core/audio/local-scanner.ts`):** Permite indexar memorias USB completas y carpetas locales del carro en segundos con nombres limpios y soporte para MP3, FLAC y M4A.
-- **MusicSearchService (`src/core/network/music-search-service.ts`):** Motor de búsqueda global sin necesidad de API Keys para que los pasajeros descubran millones de canciones usando sus datos móviles y las envíen a los parlantes del carro.
-- **CI/CD Autónomo:** Pipeline configurado en `.github/workflows/deploy-vercel.yml` para despliegues continuos a Vercel.
+Vercel (web + funciones `api/`) con Upstash Redis; red local con `npm run lan`; APK con Capacitor
+8, minSdk 26 y targetSdk 36. Ver [DEPLOY.md](DEPLOY.md).

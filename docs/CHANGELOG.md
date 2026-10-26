@@ -1,5 +1,21 @@
 # CarBeat — Registro de Versiones y Changelog Oficial
 
+## [Sin publicar] — 2026-10-26
+### 🌙 Música con la Pantalla Apagada y Documentación Sincronizada
+1. **Servicio de Audio en Primer Plano (APK):**
+   - `BackgroundAudioService.java` mantiene vivo el WebView con `PARTIAL_WAKE_LOCK` y `WifiLock` mientras suena la música.
+   - `MediaSession` nativa con notificación y controles anterior / play-pausa / siguiente, traducidos a acciones de la sala.
+   - El servicio se detiene al cerrar la cabina o salir desde *Recientes* (`stopWithTask="true"`).
+2. **Modo «Pantalla Apagada»:**
+   - Botón luna en la cabina y en *Modos > Pantalla apagada*: brillo de ventana a cero + capa negra, sin que Android apague el WebView.
+   - Es la opción recomendada para YouTube; con el botón físico, YouTube puede pausarse por su política. El audio local/HTML5 sigue gracias al servicio.
+   - En web/PWA se usa la Media Session API del navegador.
+3. **Documentación:**
+   - README, arquitectura, API, protocolo, despliegue y guía de uso sincronizados a la v2.2.0.
+   - Se recuperó la documentación completa de la rama `feat/carbeat-v2` y se actualizó con el audio en segundo plano.
+
+---
+
 ## [v2.2.0] — 2026-10-22
 ### ⚡ Sonar Ya Dual, Portada Limpia y Blindaje Definitivo de Hardware Antiguo
 1. **Acción Dual "Sonar Ya" en Buscador y Cola:**
@@ -42,7 +58,7 @@
 ### 🚗 Arquitectura CarBeat 2.0 (Salas con el Carro como Única Verdad)
 1. **Rediseño Arquitectónico de Sala:**
    - El carro pasa a ser la única fuente de verdad autoritativa (`room-engine.ts`).
-   - Sincronización telemática basada en snapshots y parches (`WireMessage`).
+   - Sincronización telemática basada en fotos (`Snapshot`) y un `WireMessage` único para todos los transportes.
 2. **Relay Serverless con Upstash Redis:**
    - Redundancia en la nube para conectar pasajeros y carros a través de firewalls o redes celulares distintas.
 3. **Autopista 3D de la Cola (QueueHighway):**
