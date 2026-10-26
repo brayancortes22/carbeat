@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ListMusic, Music2, Power, QrCode, Search, Settings2, Share2, SlidersHorizontal, X } from 'lucide-react';
+import { ListMusic, Moon, Music2, Power, QrCode, Search, Settings2, Share2, SlidersHorizontal, X } from 'lucide-react';
 import type { Notice } from '../../shared/protocol';
 import { globalAudioEngine } from '../core/audio/audio-player';
+import { useBackgroundPlayback } from '../core/audio/background-playback';
 import { carLibrary } from '../core/library';
 import { useHostSession, useLibrary, usePlayer, useTicker } from '../hooks';
 import { Cluster } from '../ui/Cluster';
@@ -19,6 +20,7 @@ import { Wordmark } from '../ui/Wordmark';
 import { CabinClock, TelltaleBar, useCabinIgnition, useMediaQuery } from '../ui/car/cabin';
 import { HighwayStrip, HighwayTag } from '../ui/car/HighwayStrip';
 import { useHighwayPref } from '../ui/car/highway-pref';
+import { ScreenOffLayer, useScreenOff } from '../ui/useScreenOff';
 import { native } from './native';
 
 /*
@@ -73,7 +75,7 @@ function StartScreen({ onStart, onSwitchRole }: { onStart: () => void; onSwitchR
           onStart();
         }}
       />
-      <p className="max-w-sm text-center text-dim">Al encender, esta pantalla queda en horizontal, sin barras y sin apagarse mientras dure el viaje.</p>
+      <p className="max-w-sm text-center text-dim">Al encender, esta pantalla queda en horizontal y sin barras. Cuando quieras oscurecerla, usa el botón de la luna: la música sigue sonando.</p>
     </div>
   );
 }
@@ -81,6 +83,8 @@ function StartScreen({ onStart, onSwitchRole }: { onStart: () => void; onSwitchR
 function Cabin({ room, onOff }: { room: string; onOff: () => void }) {
   const { session, view } = useHostSession(room, 'Carro');
   const player = usePlayer();
+  useBackgroundPlayback(session, player);
+  const { off: screenOff, sleep, wake } = useScreenOff();
   const lib = useLibrary();
   const [panel, setPanel] = useState<Panel>(null);
   const [confirmOff, setConfirmOff] = useState(false);
@@ -117,9 +121,11 @@ function Cabin({ room, onOff }: { room: string; onOff: () => void }) {
     setToasts((t) => [...fresh, ...t].slice(0, 3));
   }, [view]);
 
-  // Atrás de Android: cierra el panel; si no hay panel, pregunta antes de apagar.
+  // Atrás de Android: despierta la pantalla, cierra el panel o pregunta antes de apagar.
   const panelRef = useRef(panel);
   panelRef.current = panel;
+  const screenOffRef = useRef(screenOff);
+  screenOffRef.current = screenOff;
 
   // Cajón accesible: al abrir, el foco va a «Cerrar»; Escape lo cierra (teclado o mando del
   // carro). La revisión encontró que el lector de pantalla seguía navegando por detrás.
@@ -134,6 +140,10 @@ function Cabin({ room, onOff }: { room: string; onOff: () => void }) {
   useEffect(
     () =>
       native.onBack(() => {
+        if (screenOffRef.current) {
+          wake();
+          return true;
+        }
         if (panelRef.current) {
           setPanel(null);
           return true;
@@ -141,7 +151,7 @@ function Cabin({ room, onOff }: { room: string; onOff: () => void }) {
         setConfirmOff(true);
         return true;
       }),
-    [],
+    [wake],
   );
 
   const open = (p: Panel) => {
@@ -159,6 +169,7 @@ function Cabin({ room, onOff }: { room: string; onOff: () => void }) {
     return (
       <>
         {ignitionLayer}
+        {screenOff && <ScreenOffLayer onWake={wake} />}
         <div className="flex min-h-dvh items-center justify-center label-cluster animate-pulse text-cyan-soft">Encendiendo la cabina…</div>
       </>
     );
@@ -183,6 +194,14 @@ function Cabin({ room, onOff }: { room: string; onOff: () => void }) {
       <TelltaleBar view={view} />
       {highway && !short && <HighwayTag count={view.engine.queue.length} />}
       <CabinClock now={now} className={`ml-auto [text-shadow:0_1px_8px_rgb(0_0_0/0.9)] ${short ? 'text-2xl' : 'text-3xl'}`} />
+      <button
+        type="button"
+        onClick={tap(sleep)}
+        aria-label="Apagar la pantalla y seguir escuchando"
+        className={`press flex shrink-0 items-center justify-center rounded-full text-dim hover:text-cyan ${short ? 'h-10 w-10' : 'h-11 w-11'}`}
+      >
+        <Moon className="h-5 w-5" />
+      </button>
       <button type="button" onClick={() => open('invitar')} className="press" aria-label="Mostrar QR para invitar">
         <Plate code={view.room} size="sm" />
       </button>
@@ -326,7 +345,7 @@ function Cabin({ room, onOff }: { room: string; onOff: () => void }) {
                     />
                   )}
                   {panel === 'musica' && <CarMusicPanel lib={lib} onPlay={(tr) => session.playTrackNow(tr)} onQueue={(tr) => session.request(tr)} />}
-                  {panel === 'modos' && <DriveModesPanel view={view} session={session} />}
+                  {panel === 'modos' && <DriveModesPanel view={view} session={session} onScreenOff={sleep} />}
                   {panel === 'invitar' && (
                     <div className="flex flex-col items-center gap-6 pt-2">
                       <InviteCard room={view.room} compact={short} />
@@ -363,6 +382,7 @@ function Cabin({ room, onOff }: { room: string; onOff: () => void }) {
         )}
       </AnimatePresence>
     </div>
+    {screenOff && <ScreenOffLayer onWake={wake} />}
     </>
   );
 }

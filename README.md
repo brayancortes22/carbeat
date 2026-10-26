@@ -50,6 +50,16 @@ Sistema colaborativo de música en tiempo real para vehículos y viajes por carr
 - Botón de favorito agrandado de alto contraste en el salpicadero (`RadioDisplay.tsx`), visible bajo la luz del sol.
 - Permite al conductor guardar canciones en la memoria local permanente del vehículo con confirmación visual instantánea (*"¡Guardada en Mi Música!"*).
 
+### 8. 🌙 Música con la Pantalla Apagada
+- **Botón Luna en la Cabina:** En la barra superior (y en *Modos > Pantalla apagada*) hay un botón para dejar el panel en negro sin cortar la música. Un toque en la pantalla o el botón *Atrás* de Android la vuelven a encender.
+- **Servicio en Primer Plano (APK):** `BackgroundAudioService.java` declara una sesión de reproducción `mediaPlayback` con `PARTIAL_WAKE_LOCK` y `WifiLock`. Mantiene vivo el WebView y la conexión de la sala mientras la pantalla está apagada o la app en segundo plano.
+- **Controles del Sistema:** La notificación y la pantalla de bloqueo muestran título, carátula y botones *Anterior / Play-Pausa / Siguiente* (`MediaSession` nativa), que se traducen a acciones de la sala en JS.
+- **Web / PWA:** Se usa la Media Session API del navegador para metadatos y controles; no se registra dos veces en el APK para no duplicar la notificación.
+- **Por qué el modo luna y no el botón físico:** el reproductor de YouTube se pausa cuando Android apaga la pantalla de verdad. Bajar el brillo a cero y pintar una capa negra mantiene el WebView «visible», de modo que YouTube sigue sonando. Con el botón físico del equipo, YouTube puede pausarse por su propia política.
+- **Se detiene al salir:** el servicio se apaga al cerrar la cabina o abandonar la pantalla del carro (`stopWithTask="true"`), evitando música fantasma tras cerrar desde *Recientes*.
+
+**Archivos clave:** `BackgroundAudioService.java`, `BackgroundAudioPlugin.java`, `CarModePlugin.java` (`setScreenDim`), `src/core/audio/background-playback.ts`, `src/ui/useScreenOff.tsx`.
+
 ---
 
 ## 🏗️ Arquitectura del Sistema (CarBeat v2.2.0)
@@ -62,6 +72,8 @@ flowchart TD
         H_UI --> USB["library.ts (crawlDirectory 12 niveles)"]
         H_UI --> HW["HighwayStrip.tsx (ThreeErrorBoundary + Fallback 2D)"]
         H_UI --> RE["room-engine.ts (Motor de Sala y Votos)"]
+        H_UI --> BG["BackgroundAudioService (FGS + MediaSession)"]
+        BG --> WL["WakeLock CPU + Wi-FiLock (WebView vivo)"]
     end
 
     subgraph RED_TRANSPORTE ["2. Red de Transporte Híbrida"]
